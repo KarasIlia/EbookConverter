@@ -53,6 +53,16 @@ import Foundation
         #expect(result.document.allImages.isEmpty)
     }
 
+    @Test func imageOnlyDocumentKeepsImageInBody() async throws {
+        let dir = try folder()
+        try FixtureFactory.pngImage(width: 400, height: 600).data.write(to: dir.appending(path: "cover.png"))
+        let url = try file(Data("![cover](cover.png)\n".utf8), name: "book.md", in: dir)
+        let result = try await BookConverter().importBook(from: url, context: ImportContext(accessibleFolder: dir))
+        #expect(result.sourceCover == nil)
+        #expect(result.document.allImages.count == 1)
+        #expect(!result.document.chapters.isEmpty)
+    }
+
     @Test func txtImportsThroughFacade() async throws {
         let url = try file(Data("Hello world, this is a plain text book.".utf8), name: "a.txt")
         let result = try await BookConverter().importBook(from: url, context: ImportContext())

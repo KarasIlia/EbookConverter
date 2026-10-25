@@ -136,4 +136,15 @@ struct CoverDetectorTests {
         #expect(result.sourceCover == nil)
         #expect(result.document.allImages.count == 1)
     }
+
+    @Test func coverThatIsTheWholeBookStaysInTheBody() {
+        let image = FixtureFactory.pngImage(width: 400, height: 600, id: "img-1")
+        var document = BookDocument(
+            metadata: BookMetadata(title: "T", author: "", language: "en"),
+            chapters: [Chapter(blocks: [.image(image)])]
+        )
+        let original = document
+        #expect(CoverDetector.extractCover(from: &document) == nil)
+        #expect(document == original)
+    }
 }

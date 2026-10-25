@@ -12,11 +12,13 @@ public enum CoverDetector {
     /// is at least 0.5, regardless of preceding text. With `pdfCoverCandidateID` (the measured first-page
     /// image) and sufficient coverage, that image is the cover instead of the first one. The first image decides; one with a short side under
     /// 300 px is not a cover and nothing is removed. A chapter left with no blocks, no children and no title
-    /// is dropped; titled chapters stay. Remaining image ids are not renumbered.
+    /// is dropped; titled chapters stay. Remaining image ids are not renumbered. If removing the image would leave
+    /// the book without any content, nothing is removed and `nil` is returned.
     public static func extractCover(
         from document: inout BookDocument, pdfFirstPageImageCoverage: Double? = nil,
         pdfCoverCandidateID: String? = nil
     ) -> ImageAsset? {
+        let original = document
         let ignoresText = (pdfFirstPageImageCoverage ?? 0) >= pdfCoverageThreshold
         let candidateID = ignoresText ? pdfCoverCandidateID : nil
         var characters = 0
@@ -64,6 +66,15 @@ public enum CoverDetector {
                 chapterIndex += 1
             }
         }
+        // An image that is the whole book stays in it: a book of only a cover would be empty.
+        if cover != nil, !hasBlocks(document.chapters) {
+            document = original
+            return nil
+        }
         return cover
+    }
+
+    private static func hasBlocks(_ chapters: [Chapter]) -> Bool {
+        chapters.contains { !$0.blocks.isEmpty || hasBlocks($0.children) }
     }
 }
