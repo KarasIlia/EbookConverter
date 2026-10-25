@@ -23,4 +23,12 @@ if [[ ! -f "$jar" ]]; then
     [[ -f "$jar" ]] || { echo "epubcheck.jar missing after unpack" >&2; exit 1; }
 fi
 
-exec java -jar "$jar" "$@"
+if [[ -n "${JAVA_HOME:-}" && -x "$JAVA_HOME/bin/java" ]]; then
+    java_bin="$JAVA_HOME/bin/java"
+elif [[ -x /opt/homebrew/opt/openjdk/bin/java ]]; then
+    java_bin=/opt/homebrew/opt/openjdk/bin/java
+else
+    java_bin=java
+fi
+
+exec "$java_bin" -jar "$jar" "$@"

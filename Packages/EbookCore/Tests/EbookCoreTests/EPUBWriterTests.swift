@@ -183,12 +183,27 @@ import Testing
         #expect(try makeEPUB() == makeEPUB())
     }
 
-    @Test(.enabled(if: ProcessInfo.processInfo.environment["EPUBCHECK_JAR"] != nil))
-    func epubcheckPasses() throws {
+    private static func javaPath() -> String {
+        let env = ProcessInfo.processInfo.environment
+        if let override = env["EPUBCHECK_JAVA"] { return override }
+        if let home = env["JAVA_HOME"], FileManager.default.isExecutableFile(atPath: home + "/bin/java") {
+            return home + "/bin/java"
+        }
+        let brew = "/opt/homebrew/opt/openjdk/bin/java"
+        return FileManager.default.isExecutableFile(atPath: brew) ? brew : "/usr/bin/java"
+    }
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["EPUBCHECK_JAR"] != nil),
+          arguments: ["cover", "noCover", "rtl"])
+    func epubcheckPasses(variant: String) throws {
         let jar = ProcessInfo.processInfo.environment["EPUBCHECK_JAR"] ?? ""
-        let epub = try makeEPUB()
+        let epub = switch variant {
+        case "noCover": try makeEPUB(withCover: false)
+        case "rtl": try makeEPUB(FixtureFactory.sampleDocument(language: "ar"))
+        default: try makeEPUB()
+        }
         try withTempFile(epub) { url in
-            let result = try run("/usr/bin/java", ["-jar", jar, "--failonwarnings", url.path(percentEncoded: false)])
+            let result = try run(Self.javaPath(), ["-jar", jar, "--failonwarnings", url.path(percentEncoded: false)])
             let output = String(decoding: result.output, as: UTF8.self)
             #expect(result.status == 0, "\(output)")
         }
