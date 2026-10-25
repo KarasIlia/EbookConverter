@@ -18,7 +18,9 @@ final class FB2BodyConverter {
         guard !sections.isEmpty else {
             return [Chapter(blocks: ownBlocks(of: body))]
         }
-        return sections.map(topLevelChapter)
+        // Content beside the sections (an epigraph, an image, opening paragraphs) leads the book untitled.
+        let own = ownBlocks(of: body)
+        return (own.isEmpty ? [] : [Chapter(blocks: own)]) + sections.map(topLevelChapter)
     }
 
     // MARK: - Chapters

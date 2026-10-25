@@ -87,7 +87,7 @@ public struct EPUBImporter: BookImporter {
         }
 
         if zip.isBudgetExhausted { throw ImportError.unreadable("Archive expands to too much data") }
-        chapters = chapters.compactMap(pruned)
+        chapters = EmptyChapterPruner.pruned(chapters)
         guard !chapters.isEmpty else { throw ImportError.emptyDocument }
         var imageNumbers: [String: Int] = [:]
         chapters = chapters.map { renumbered($0, numbers: &imageNumbers) }
@@ -182,13 +182,6 @@ public struct EPUBImporter: BookImporter {
         } else {
             chapters[last].children[chapters[last].children.count - 1].blocks.append(contentsOf: blocks)
         }
-    }
-
-    /// Drops chapters that have neither content nor sub-chapters.
-    private static func pruned(_ chapter: Chapter) -> Chapter? {
-        var chapter = chapter
-        chapter.children = chapter.children.compactMap(pruned)
-        return chapter.blocks.isEmpty && chapter.children.isEmpty ? nil : chapter
     }
 
     /// Gives images the ids `img-1`, `img-2`, ... in order of first appearance.

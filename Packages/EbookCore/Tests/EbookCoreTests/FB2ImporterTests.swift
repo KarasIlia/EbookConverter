@@ -110,6 +110,46 @@ import Testing
         ])
     }
 
+    @Test func bodyContentBeforeSectionsBecomesLeadingChapter() async throws {
+        let result = try await Self.importFB2("""
+            <body><title><p>Book</p></title><epigraph><p>Motto.</p></epigraph><p>Opening words.</p>
+            <section><title><p>One</p></title><p>Text.</p></section></body>
+            """)
+        #expect(result.document.chapters.map(\.title) == [nil, "One"])
+        #expect(result.document.chapters.first?.plainText == "Motto.\nOpening words.")
+    }
+
+    @Test func bodyWithOnlyTitleAndSectionsHasNoLeadingChapter() async throws {
+        let result = try await Self.importFB2("""
+            <body><title><p>Book</p></title><section><title><p>One</p></title><p>Text.</p></section></body>
+            """)
+        #expect(result.document.chapters.map(\.title) == ["One"])
+    }
+
+    @Test func titledEmptySectionsAreKept() async throws {
+        let result = try await Self.importFB2("""
+            <body><section><title><p>Authors</p></title><empty-line/></section><section><empty-line/></section>
+            <section><title><p>One</p></title><p>Text.</p></section></body>
+            """)
+        #expect(result.document.chapters.map(\.title) == ["Authors", "One"])
+    }
+
+    @Test func titledEmptyChapterSurvivesRoundTrips() async throws {
+        let original = BookDocument(
+            metadata: BookMetadata(title: "Book", author: "A B", language: "en"),
+            chapters: [
+                Chapter(title: "Authors"),
+                Chapter(title: "One", blocks: [.paragraph([InlineRun("Text.")])]),
+            ]
+        )
+        let fb2 = try await FB2Importer().importBook(from: Self.write(FB2Writer().write(original, cover: nil)), context: ImportContext())
+        #expect(fb2.document.chapters.map(\.title) == ["Authors", "One"])
+        let epubURL = URL.temporaryDirectory.appending(path: "\(UUID().uuidString).epub")
+        try EPUBWriter().write(original, cover: nil).write(to: epubURL)
+        let epub = try await EPUBImporter().importBook(from: epubURL, context: ImportContext())
+        #expect(epub.document.chapters.map(\.title) == ["Authors", "One"])
+    }
+
     @Test func leadingUntitledChildSectionMergesIntoPart() async throws {
         let result = try await Self.importFB2("""
         <body><section><title><p>Part</p></title>

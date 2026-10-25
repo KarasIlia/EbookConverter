@@ -5,8 +5,6 @@ import Foundation
 /// Reads the first `body` that is not a notes body. Top-level sections become chapters, their sections
 /// become sub-chapters, and anything deeper is flattened into the sub-chapter with its title as a level-3 heading.
 public struct FB2Importer: BookImporter {
-    private static let subheadingLevel = 3
-
     public init() {}
 
     public func importBook(from url: URL, context: ImportContext) async throws -> ImportResult {
@@ -26,7 +24,7 @@ public struct FB2Importer: BookImporter {
         let body = root.children(named: "body").first { $0.attributes["name"]?.lowercased() != "notes" }
         let converter = FB2BodyConverter(images: images)
         var chapters = body.map(converter.chapters(in:)) ?? []
-        chapters = chapters.compactMap(pruned)
+        chapters = EmptyChapterPruner.pruned(chapters)
         guard !chapters.isEmpty else { throw ImportError.emptyDocument }
 
         var warnings: [ImportWarning] = []
@@ -67,13 +65,6 @@ public struct FB2Importer: BookImporter {
     }
 
     // MARK: - Chapter helpers
-
-    /// Drops chapters that have neither content nor sub-chapters.
-    private static func pruned(_ chapter: Chapter) -> Chapter? {
-        var chapter = chapter
-        chapter.children = chapter.children.compactMap(pruned)
-        return chapter.blocks.isEmpty && chapter.children.isEmpty ? nil : chapter
-    }
 
     private static func hasTitle(_ chapters: [Chapter]) -> Bool {
         chapters.contains { $0.title != nil || hasTitle($0.children) }
