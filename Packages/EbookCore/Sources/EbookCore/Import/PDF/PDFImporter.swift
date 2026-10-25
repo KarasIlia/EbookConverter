@@ -25,7 +25,9 @@ public struct PDFImporter: BookImporter {
         }
         let located = PDFReflow.locatedParagraphs(from: PDFReflow.removingRunningHeaders(lines))
         guard !located.isEmpty else { throw ImportError.emptyDocument }
-        let images = document.documentRef.map { PDFImageExtractor.images(in: $0) } ?? []
+        let images = PDFImagePlacer.removingBackgrounds(
+            document.documentRef.map { PDFImageExtractor.images(in: $0) } ?? [], lines: lines
+        )
         let items = PDFImagePlacer.merged(located, images: images)
 
         let chapters: [Chapter]

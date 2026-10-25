@@ -9,6 +9,29 @@ import CoreGraphics
 /// in the middle of a paragraph puts the image after that paragraph. Images on pages without text follow the
 /// previous pages' text. Images are then renumbered `img-1`, `img-2`, … in final reading order.
 enum PDFImagePlacer {
+    /// An image covering at least this share of its page's area is a background candidate.
+    static let backgroundAreaShare = 0.9
+    /// Pages with more extracted characters than this treat a page-covering image as a background or scan
+    /// layer and drop it; pages with less text (covers, full-page illustrations) keep it.
+    static let backgroundTextCharacters = 200
+
+    /// `images` without page-covering background layers behind text-heavy pages. `lines` are all extracted
+    /// lines (before running-header removal); they also supply each page's visible size.
+    static func removingBackgrounds(_ images: [PDFPlacedImage], lines: [PDFTextLine]) -> [PDFPlacedImage] {
+        var characters: [Int: Int] = [:]
+        var pageSizes: [Int: CGSize] = [:]
+        for line in lines {
+            characters[line.pageIndex, default: 0] += line.text.count
+            pageSizes[line.pageIndex] = line.pageSize
+        }
+        return images.filter { image in
+            guard let size = pageSizes[image.pageIndex],
+                  characters[image.pageIndex, default: 0] > backgroundTextCharacters else { return true }
+            let area = image.bounds.width * image.bounds.height
+            return area < backgroundAreaShare * size.width * size.height
+        }
+    }
+
     static func merged(_ located: [PDFReflow.Located], images: [PDFPlacedImage]) -> [PDFFlowItem] {
         // Lines in reading order with the index of the paragraph they belong to.
         let lines = located.enumerated().flatMap { index, item in item.lines.map { (paragraph: index, line: $0) } }

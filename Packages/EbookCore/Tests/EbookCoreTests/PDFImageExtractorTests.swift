@@ -91,13 +91,14 @@ struct PDFImageExtractorTests {
     /// A hand-written one-page PDF: the page draws Form `/Fm1` (matrix 0.5 scale, offset 50,-100), whose own
     /// resources hold a 2x2 red image `/Im1` drawn at 200x150 from (100, 400). CoreGraphics flattens drawn
     /// pages, so a form has to be written by hand.
-    private static func formWrappedImagePDF() throws -> URL {
-        let formContent = "q 200 0 0 150 100 400 cm /Im1 Do Q"
-        let pageContent = "q /Fm1 Do Q"
+    /// `pageContent` may also draw `/Im1` directly.
+    private static func formWrappedImagePDF(
+        formContent: String = "q 200 0 0 150 100 400 cm /Im1 Do Q", pageContent: String = "q /Fm1 Do Q"
+    ) throws -> URL {
         let objects: [Data] = [
             Data("<< /Type /Catalog /Pages 2 0 R >>".utf8),
             Data("<< /Type /Pages /Kids [3 0 R] /Count 1 >>".utf8),
-            Data("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /XObject << /Fm1 4 0 R >> >> /Contents 6 0 R >>".utf8),
+            Data("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /XObject << /Fm1 4 0 R /Im1 5 0 R >> >> /Contents 6 0 R >>".utf8),
             Data("<< /Type /XObject /Subtype /Form /BBox [0 0 595 842] /Matrix [0.5 0 0 0.5 50 -100] /Resources << /XObject << /Im1 5 0 R >> >> /Length \(formContent.utf8.count) >>\nstream\n\(formContent)\nendstream".utf8),
             Data("<< /Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Length 12 >>\nstream\n".utf8)
                 + Data([UInt8](repeating: 0, count: 4).flatMap { _ in [0xCC, 0x33, 0x33] }) + Data("\nendstream".utf8),
@@ -129,6 +130,17 @@ struct PDFImageExtractorTests {
         #expect(images.count == 1)
         Self.expectRect(images.first?.bounds, CGRect(x: 100, y: 100, width: 100, height: 75))
         #expect(images.first.map { Self.cornersAreRed($0.asset) } == true)
+    }
+
+    /// A malformed form popping more states than it pushed must not unwind the page's own `q` stack.
+    @Test func formWithExtraRestoreKeepsParentStack() throws {
+        let url = try Self.formWrappedImagePDF(
+            formContent: "Q Q",
+            pageContent: "q q 0.5 0 0 0.5 0 0 cm /Fm1 Do Q Q 200 0 0 150 100 400 cm /Im1 Do"
+        )
+        let images = PDFImageExtractor.images(in: try Self.cgDocument(url))
+        #expect(images.count == 1)
+        Self.expectRect(images.first?.bounds, CGRect(x: 100, y: 400, width: 200, height: 150))
     }
 
     @Test func rotatedPageBoundsUseVisiblePageSpace() throws {
@@ -194,6 +206,38 @@ struct PDFImageExtractorTests {
         #expect(blocks.first == .paragraph([InlineRun(left.joined(separator: " "))]))
         if case .image = blocks.dropFirst().first {} else { Issue.record("Expected an image second, got \(blocks)") }
         #expect(blocks.last == .paragraph([InlineRun(right.joined(separator: " "))]))
+    }
+
+    /// A page-covering image under a full text page is a background or scan layer, not an illustration.
+    @Test func importerDropsFullPageImageBehindLongText() async throws {
+        let lines = [
+            "It was a bright cold day in April, and the clocks",
+            "were striking thirteen. Winston Smith, his chin",
+            "nuzzled into his breast in an effort to escape the",
+            "vile wind, slipped quickly through the glass doors",
+            "of Victory Mansions, though not quickly enough.",
+        ]
+        let url = try FixtureFactory.pdf(
+            pages: [Self.textBoxes(lines, top: 700)],
+            images: [Self.imageBox(CGRect(x: 0, y: 0, width: 595, height: 842))]
+        )
+        let result = try await PDFImporter().importBook(from: url, context: ImportContext())
+        #expect(result.document.allImages.isEmpty)
+        #expect(result.document.chapters.flatMap(\.blocks).count == 1)
+    }
+
+    /// A page-covering image with only a little text (a cover, a full-page illustration) is kept.
+    @Test func importerKeepsFullPageImageWithShortText() async throws {
+        let body = [
+            "It was a bright cold day in April, and the clocks",
+            "were striking thirteen and nobody looked up.",
+        ]
+        let url = try FixtureFactory.pdf(
+            pages: [Self.textBoxes(["The Cover Title Of The Book"], top: 700), Self.textBoxes(body, top: 700)],
+            images: [Self.imageBox(CGRect(x: 0, y: 0, width: 595, height: 842), page: 0)]
+        )
+        let result = try await PDFImporter().importBook(from: url, context: ImportContext())
+        #expect(result.document.allImages.count == 1)
     }
 
     @Test func importerKeepsImagesOfTextlessPagesInPageOrder() async throws {

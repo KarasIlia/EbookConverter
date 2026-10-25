@@ -9,6 +9,7 @@ import UniformTypeIdentifiers
 /// Form XObjects are found too (the form's `/Matrix` is applied, up to `maximumFormDepth` levels). Inline
 /// images (`BI … EI`) are not extracted. Rendering the page region rather than decoding the image data keeps
 /// masks, decode arrays and colour spaces right, at the cost of including anything drawn over the image.
+/// Clip paths and form `/BBox`es are not applied, so a clipped image reports its full placed rectangle.
 public enum PDFImageExtractor {
     /// Render resolution relative to page points.
     static let renderScale: CGFloat = 2
@@ -130,9 +131,11 @@ public enum PDFImageExtractor {
             // An image fills the unit square of its user space.
             state.placements.append(CGRect(x: 0, y: 0, width: 1, height: 1).applying(state.ctm))
         case "Form" where state.formDepth < maximumFormDepth:
-            // A form runs like `q <Matrix> cm … Q` with its own resources (falling back to the parent's).
+            // A form runs like `q <Matrix> cm … Q` with its own resources (falling back to the parent's) and
+            // its own `q`/`Q` stack, so a malformed form with extra `Q`s cannot unwind the parent's states.
             let savedCTM = state.ctm
-            let savedStackCount = state.stack.count
+            let savedStack = state.stack
+            state.stack = []
             state.ctm = formMatrix(dictionary).concatenating(state.ctm)
             state.formDepth += 1
             var resources: CGPDFDictionaryRef?
@@ -143,7 +146,7 @@ public enum PDFImageExtractor {
             scan(formStream, state: state)
             CGPDFContentStreamRelease(formStream)
             state.formDepth -= 1
-            state.stack.removeLast(max(0, state.stack.count - savedStackCount))
+            state.stack = savedStack
             state.ctm = savedCTM
         default:
             break
