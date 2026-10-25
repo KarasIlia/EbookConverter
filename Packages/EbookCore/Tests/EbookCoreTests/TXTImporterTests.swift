@@ -57,6 +57,12 @@ import Foundation
         #expect(result.document.chapters.map(\.title).contains("ПОСВЯЩЕНИЕ"))
     }
 
+    @Test func capitalsLineEndingInCommaIsNotHeading() async throws {
+        let p = TextEncodingTests.russian
+        let result = try await importBook("\(p)\nМАКСИМ МИХЕЕНКО,\nПродюсер студии\n\(p)\n\(p)\n\(p)\n\(p)")
+        #expect(result.warnings.contains(.noChaptersFound))
+    }
+
     @Test func manyCapitalsLinesAreSpeakerNamesNotHeadings() async throws {
         let line = "To be, or not to be, that is the question."
         let text = (0..<5).map { _ in "HAMLET\n\n\(line)" }.joined(separator: "\n\n")

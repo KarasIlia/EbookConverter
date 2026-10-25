@@ -119,10 +119,13 @@ public struct TXTImporter: BookImporter {
         HeadingPatterns.partOrChapter(line) != nil || isCapitalsHeading(line)
     }
 
-    /// A short line without closing punctuation that is entirely upper-case in a script that has case.
+    /// Endings of a line that continues (a name before its caption, a list item), so it is not a heading.
+    private static let continuingEndings: Set<Character> = [",", ";", "،", "、", "，", "；"]
+
+    /// A short line without closing or continuing punctuation that is entirely upper-case in a script that has case.
     static func isCapitalsHeading(_ paragraph: String) -> Bool {
-        guard paragraph.count <= maxCapitalsHeadingLength,
-              let last = paragraph.last, !ScriptTraits.isSentenceTerminal(last) else { return false }
+        guard paragraph.count <= maxCapitalsHeadingLength, let last = paragraph.last,
+              !ScriptTraits.isSentenceTerminal(last), !continuingEndings.contains(last) else { return false }
         return paragraph == paragraph.uppercased() && paragraph != paragraph.lowercased()
     }
 }
