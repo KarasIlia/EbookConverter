@@ -124,6 +124,73 @@ struct PDFReflowTests {
         #expect(result.count == 1)
     }
 
+    @Test func denseDialogueKeepsIndentedLinesAsParagraphs() {
+        // Many single-line replies indented at x=90, a few wrapped ones continuing at the margin x=72:
+        // the most common start is the indent, yet the margin lines are continuations, not hanging lines.
+        var lines: [PDFTextLine] = []
+        var y = 780.0
+        for reply in 0..<15 {
+            lines.append(line("— Reply number \(reply), — he said.", x: 90, y: y, width: 200))
+            y -= 14
+            if reply % 3 == 0 {
+                lines[lines.count - 1] = line("— This reply \(reply) is long and wraps onto the next", x: 90, y: y + 14, width: 382)
+                lines.append(line("line at the margin.", x: 72, y: y, width: 120))
+                y -= 14
+            }
+        }
+        let paragraphs = texts(lines)
+        #expect(paragraphs.count == 15)
+        #expect(paragraphs[0] == "— This reply 0 is long and wraps onto the next line at the margin.")
+        #expect(paragraphs[1] == "— Reply number 1, — he said.")
+    }
+
+    @Test func fullWidthLineDoesNotShortenColumnLines() {
+        let result = texts([
+            line("A full width line of the same size spanning both columns", x: 50, y: 780, width: 495),
+            line("Left column text that wraps", x: 50, y: 700, width: 240),
+            line("onto a second line and then a", x: 50, y: 686, width: 238),
+            line("third one.", x: 50, y: 672, width: 60),
+        ])
+        #expect(result == [
+            "A full width line of the same size spanning both columns",
+            "Left column text that wraps onto a second line and then a third one.",
+        ])
+    }
+
+    @Test func interleavedColumnsAreReorderedByColumn() {
+        // PDFKit order alternates between the columns; a full-width line splits the page into two bands.
+        let result = texts([
+            line("Left top starts", x: 50, y: 760, width: 240),
+            line("Right top starts", x: 310, y: 760, width: 240),
+            line("and ends here.", x: 50, y: 746, width: 240),
+            line("and ends there.", x: 310, y: 746, width: 240),
+            line("A full width caption across the page.", x: 50, y: 500, width: 495),
+            line("Left bottom starts", x: 50, y: 400, width: 240),
+            line("Right bottom starts", x: 310, y: 400, width: 240),
+            line("and ends below.", x: 50, y: 386, width: 240),
+            line("and ends at last.", x: 310, y: 386, width: 240),
+        ])
+        #expect(result == [
+            "Left top starts and ends here.",
+            "Right top starts and ends there.",
+            "A full width caption across the page.",
+            "Left bottom starts and ends below.",
+            "Right bottom starts and ends at last.",
+        ])
+    }
+
+    @Test func singleColumnWithCenteredHeadingsIsNotReordered() {
+        let result = texts([
+            line("Heading One", x: 250, y: 780, width: 100, fontSize: 16),
+            line("Body text that runs across the full measure of the page.", x: 72, y: 750, width: 450),
+            line("Heading Two", x: 250, y: 720, width: 100, fontSize: 16),
+            line("More body text that runs across the full measure here.", x: 72, y: 690, width: 450),
+            line("Heading Three", x: 250, y: 660, width: 100, fontSize: 16),
+        ])
+        #expect(result.first == "Heading One")
+        #expect(result.last == "Heading Three")
+    }
+
     @Test func breaksOnFontChange() {
         let paragraphs = PDFReflow.paragraphs(from: [
             line("Chapter heading", y: 720, fontSize: 20),
@@ -167,12 +234,20 @@ struct PDFReflowTests {
         var lines: [PDFTextLine] = []
         for page in 0..<4 {
             lines.append(line(Self.words[page], page: page, y: 600))
-            lines.append(line("Book Title \(page + 10)", page: page, y: 400))
+            lines.append(line("Book Title \(page + 10)", page: page, y: 810))
             lines.append(line("\(page + 1)", page: page, y: 30))
-            lines.append(line(["i", "ii", "iii", "iv"][page], page: page, y: 800))
+            lines.append(line(["i", "ii", "iii", "iv"][page], page: page, y: 790))
         }
         let kept = PDFReflow.removingRunningHeaders(lines).map(\.text)
         #expect(kept == Self.words)
+    }
+
+    @Test func keepsRepeatedLinesOutsideMarginZones() {
+        // Numbered headings normalize to the same text, but they sit mid-page: geometry decides.
+        let lines = (0..<4).flatMap { page in
+            [line("Chapter \(page + 1)", page: page, y: 600), line("Pages \(page * 2 + 16)–\(page * 2 + 17)", page: page, y: 500)]
+        }
+        #expect(PDFReflow.removingRunningHeaders(lines) == lines)
     }
 
     @Test func keepsRepeatedLinesOnFewPages() {

@@ -54,6 +54,16 @@ struct PDFImporterTests {
         #expect(result.warnings.isEmpty)
     }
 
+    @Test func numberedChapterHeadingsMidPageSurvive() async throws {
+        let url = try FixtureFactory.pdf(pages: Self.chapterPages(["Chapter 1", "Chapter 2", "Chapter 3"]).map { page in
+            // Move the heading to mid-page, away from the header zone.
+            [FixtureTextBox(page[0].text, rect: CGRect(x: 72, y: 500, width: 400, height: 24), fontSize: 20)]
+                + page.dropFirst().map { FixtureTextBox($0.text, rect: $0.rect.offsetBy(dx: 0, dy: -240)) }
+        })
+        let chapters = try await importBook(url).document.chapters
+        #expect(chapters.map(\.title) == ["Chapter 1", "Chapter 2", "Chapter 3"])
+    }
+
     @Test func usesOutlineWhenPresent() async throws {
         let source = try FixtureFactory.pdf(pages: Self.chapterPages(["Heading A", "Heading B"]))
         let document = try #require(PDFDocument(url: source))

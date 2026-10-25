@@ -21,6 +21,8 @@ public enum PDFReflow {
     static let fitSlack = 0.5
     /// Share of the column width a line must stop short of the right edge by to count as ended on purpose.
     static let raggedShare = 0.15
+    /// Share of a page's characters a left edge must carry to count as a column start for reordering.
+    static let columnShare = 0.1
 
     /// Characters that end a paragraph at a page or column boundary.
     private static let closingQuotes: Set<Character> = ["»", "\"", "”"]
@@ -36,19 +38,20 @@ public enum PDFReflow {
         locatedParagraphs(from: lines).map(\.paragraph)
     }
 
-    /// Removes running headers/footers (repeated lines, digits ignored) and bare page numbers in the margins.
+    /// Removes running headers/footers and bare page numbers. Only lines in the top/bottom margin zones are
+    /// candidates — geometry decides, whatever PDFKit's text order — so repeated mid-page lines
+    /// ("Chapter 1", "Chapter 2"…) survive.
     public static func removingRunningHeaders(_ lines: [PDFTextLine]) -> [PDFTextLine] {
         let pageCount = Set(lines.map(\.pageIndex)).count
         var pagesByText: [String: Set<Int>] = [:]
-        for line in lines {
+        for line in lines where isInMarginZone(line) {
             pagesByText[normalized(line.text), default: []].insert(line.pageIndex)
         }
         let threshold = max(Double(minimumRepeatPages), Double(pageCount) * repeatPageShare)
-        // Geometry decides, not PDFKit order: a repeated header is removed wherever it appears in the text stream.
         let repeated = Set(pagesByText.filter { Double($0.value.count) >= threshold }.keys)
         return lines.filter { line in
-            if repeated.contains(normalized(line.text)) { return false }
-            return !(isInMarginZone(line) && isPageNumber(line.text))
+            guard isInMarginZone(line) else { return true }
+            return !repeated.contains(normalized(line.text)) && !isPageNumber(line.text)
         }
     }
 
@@ -75,6 +78,7 @@ public enum PDFReflow {
     // MARK: - Paragraphs
 
     static func locatedParagraphs(from lines: [PDFTextLine]) -> [Located] {
+        let lines = orderedByColumns(lines)
         let spacing = medianLineSpacing(byPage: lines)
         let edges = columnEdges(of: lines)
         var result: [Located] = []
@@ -87,6 +91,68 @@ public enum PDFReflow {
             } else {
                 result.append(Located(paragraph: StyledParagraph(runs: line.runs, fontSize: line.fontSize), firstLine: line))
             }
+        }
+        return result
+    }
+
+    // MARK: - Column order
+
+    /// Keeps PDFKit order unless a page's text alternates between columns more than twice; such a page is
+    /// re-read column by column (left to right, top-down) within bands separated by full-width lines.
+    static func orderedByColumns(_ lines: [PDFTextLine]) -> [PDFTextLine] {
+        var result: [PDFTextLine] = []
+        var start = lines.startIndex
+        while start < lines.endIndex {
+            let page = lines[start].pageIndex
+            let end = lines[start...].firstIndex { $0.pageIndex != page } ?? lines.endIndex
+            result += orderedPage(Array(lines[start..<end]))
+            start = end
+        }
+        return result
+    }
+
+    private static func orderedPage(_ lines: [PDFTextLine]) -> [PDFTextLine] {
+        // Column starts: left edges carrying a real share of the page's text (short fill-in fragments don't),
+        // at least a column jump apart.
+        var characters: [Int: Int] = [:]
+        for line in lines { characters[Int(line.bounds.minX.rounded()), default: 0] += line.text.count }
+        let total = lines.reduce(0) { $0 + $1.text.count }
+        var columnStarts: [Double] = []
+        for x in characters.keys.sorted() {
+            let share = (x - 2...x + 2).reduce(0) { $0 + (characters[$1] ?? 0) }
+            guard Double(share) >= columnShare * Double(total) else { continue }
+            if columnStarts.last.map({ Double(x) - $0 > columnJump }) ?? true { columnStarts.append(Double(x)) }
+        }
+        guard columnStarts.count >= 2 else { return lines }
+        // A line belongs to the last column starting at most half a jump right of it (hanging headwords
+        // sit a little left of their column's body text).
+        func column(of line: PDFTextLine) -> Int {
+            columnStarts.lastIndex { $0 <= line.bounds.minX + columnJump / 2 } ?? 0
+        }
+        // A line running well into the next column is full-width (single-column body text next to
+        // centred headings is too, so such pages are never reordered).
+        func isSpanning(_ line: PDFTextLine) -> Bool {
+            let next = column(of: line) + 1
+            return next < columnStarts.count && line.bounds.maxX > columnStarts[next] + columnJump / 2
+        }
+        let columns = lines.filter { !isSpanning($0) }.map(column(of:))
+        let switches = zip(columns, columns.dropFirst()).count { $0 != $1 }
+        guard switches > 2 else { return lines }
+
+        let spanning = lines.filter(isSpanning).sorted { $0.bounds.midY > $1.bounds.midY }
+        var bands = Array(repeating: [PDFTextLine](), count: spanning.count + 1)
+        for line in lines where !isSpanning(line) {
+            bands[spanning.count { $0.bounds.midY > line.bounds.midY }].append(line)
+        }
+        var result: [PDFTextLine] = []
+        for (index, band) in bands.enumerated() {
+            result += band.enumerated().sorted { lhs, rhs in
+                let (a, b) = (lhs.element, rhs.element)
+                if column(of: a) != column(of: b) { return column(of: a) < column(of: b) }
+                if a.bounds.midY != b.bounds.midY { return a.bounds.midY > b.bounds.midY }
+                return lhs.offset < rhs.offset
+            }.map(\.element)
+            if index < spanning.count { result.append(spanning[index]) }
         }
         return result
     }
@@ -104,7 +170,7 @@ public enum PDFReflow {
         }
     }
 
-    /// Where a line's column has its body text: the most common left edge, and the right edge of same-size lines.
+    /// Where a line's column has its body text: the body left edge and the right margin of same-size lines.
     private struct ColumnEdges {
         var left: Double
         var right: Double
@@ -115,24 +181,51 @@ public enum PDFReflow {
         let indicesByPage = Dictionary(grouping: lines.indices, by: { lines[$0].pageIndex })
         var edges = lines.map { ColumnEdges(left: $0.bounds.minX, right: $0.bounds.maxX) }
         for indices in indicesByPage.values {
+            let pageLines = indices.map { lines[$0] }
             for index in indices {
                 let line = lines[index]
-                let column = indices.map { lines[$0] }.filter { abs($0.bounds.minX - line.bounds.minX) < columnJump }
-                // The body edge is the start most lines share (±2 pt), ties to the left: hanging first lines
-                // and indented first lines are both exceptions to it.
-                var buckets: [Int: Int] = [:]
-                for other in column { buckets[Int(other.bounds.minX.rounded()), default: 0] += 1 }
-                var best: (x: Int, count: Int)?
-                for x in buckets.keys {
-                    let count = (x - 2...x + 2).reduce(0) { $0 + (buckets[$1] ?? 0) }
-                    if best.map({ count > $0.count || (count == $0.count && x < $0.x) }) ?? true { best = (x, count) }
-                }
-                if let best { edges[index].left = Double(best.x) }
-                let sameSize = column.filter { abs($0.fontSize - line.fontSize) <= fontSizeTolerance }
-                edges[index].right = sameSize.map { Double($0.bounds.maxX) }.max() ?? line.bounds.maxX
+                let column = pageLines.filter { abs($0.bounds.minX - line.bounds.minX) < columnJump }
+                edges[index].left = leftEdge(of: column, inOrder: pageLines)
+                edges[index].right = rightEdge(of: column.filter { abs($0.fontSize - line.fontSize) <= fontSizeTolerance })
+                    ?? line.bounds.maxX
             }
         }
         return edges
+    }
+
+    /// The column's body edge. Normally the leftmost start (indented first lines are exceptions). When most
+    /// lines start further right, the leftmost lines may be hanging first lines (dictionaries, bibliographies):
+    /// that is accepted only if those lines usually run on into a line at the common start, i.e. a leftmost line
+    /// followed by a common-start line rarely ends a sentence. In indented prose (dense dialogue) it does.
+    private static func leftEdge(of column: [PDFTextLine], inOrder pageLines: [PDFTextLine]) -> Double {
+        var buckets: [Int: Int] = [:]
+        for line in column { buckets[Int(line.bounds.minX.rounded()), default: 0] += 1 }
+        var common: (x: Int, count: Int)?
+        for x in buckets.keys {
+            let count = (x - 2...x + 2).reduce(0) { $0 + (buckets[$1] ?? 0) }
+            if common.map({ count > $0.count || (count == $0.count && x < $0.x) }) ?? true { common = (x, count) }
+        }
+        let minimum = column.map { Double($0.bounds.minX) }.min() ?? 0
+        guard let common, Double(common.x) - minimum > 2 else { return minimum }
+        let commonX = Double(common.x)
+        var runOns = 0, endings = 0
+        for (line, next) in zip(pageLines, pageLines.dropFirst())
+        where abs(line.bounds.minX - minimum) <= 2 && abs(next.bounds.minX - commonX) <= 2 {
+            let endsSentence = line.text.trimmingCharacters(in: .whitespaces).last.map(isParagraphEnd) ?? false
+            if endsSentence { endings += 1 } else { runOns += 1 }
+        }
+        return runOns > endings ? commonX : minimum
+    }
+
+    /// The column's right margin: the 90th percentile end of lines of typical width, so a full-width line or
+    /// one stray wide line does not make every column line look short.
+    private static func rightEdge(of lines: [PDFTextLine]) -> Double? {
+        guard !lines.isEmpty else { return nil }
+        let widths = lines.map { Double($0.bounds.width) }.sorted()
+        let typicalWidth = widths[widths.count / 2]
+        let ends = lines.filter { Double($0.bounds.width) <= typicalWidth * 1.3 }.map { Double($0.bounds.maxX) }.sorted()
+        guard !ends.isEmpty else { return nil }
+        return ends[min(ends.count - 1, Int(Double(ends.count) * 0.9))]
     }
 
     private static func breaks(

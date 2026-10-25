@@ -12,7 +12,10 @@ public struct PDFImporter: BookImporter {
     public init() {}
 
     public func importBook(from url: URL, context: ImportContext) async throws -> ImportResult {
-        guard let document = PDFDocument(url: url) else { throw ImportError.unreadable("Not a readable PDF") }
+        // Checking the signature first keeps CoreGraphics from logging parse errors for non-PDF files.
+        guard Self.hasPDFSignature(url), let document = PDFDocument(url: url) else {
+            throw ImportError.unreadable("Not a readable PDF")
+        }
         guard !document.isLocked else { throw ImportError.pdfLocked }
 
         let lines = PDFLineExtractor.lines(in: document)
@@ -46,6 +49,14 @@ public struct PDFImporter: BookImporter {
             language: language ?? "und"
         )
         return ImportResult(document: BookDocument(metadata: metadata, chapters: chapters), warnings: warnings)
+    }
+
+    /// `%PDF` must appear within the first 1024 bytes.
+    private static func hasPDFSignature(_ url: URL) -> Bool {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return false }
+        defer { try? handle.close() }
+        guard let head = try? handle.read(upToCount: 1024) else { return false }
+        return head.firstRange(of: Data("%PDF".utf8)) != nil
     }
 
     private static func attribute(_ key: PDFDocumentAttribute, in attributes: [AnyHashable: Any]) -> String? {
