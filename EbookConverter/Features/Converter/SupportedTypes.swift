@@ -1,3 +1,4 @@
+import Foundation
 import UniformTypeIdentifiers
 
 /// File types the converter can open.
@@ -17,4 +18,13 @@ enum SupportedTypes {
 
     /// Image types accepted as a custom cover, by drag and drop or in the file importer.
     static let coverImages: [UTType] = [.jpeg, .png, .heic, .tiff]
+
+    /// `true` if the file at `url` has one of `types`, judged by the file system's content type
+    /// (or, failing that, by the file name extension).
+    static func file(_ url: URL, isOneOf types: [UTType]) -> Bool {
+        let type = (try? url.resourceValues(forKeys: [.contentTypeKey]))?.contentType
+            ?? UTType(filenameExtension: url.pathExtension)
+        guard let type else { return false }
+        return types.contains(where: type.conforms(to:))
+    }
 }

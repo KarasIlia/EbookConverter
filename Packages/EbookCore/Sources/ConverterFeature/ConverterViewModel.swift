@@ -35,7 +35,8 @@ import EbookCore
 
     public private(set) var coverSource: CoverSource = .generated
     public private(set) var sizeStatus: BookSizeStatus = .computing
-    /// Error of the last failed re-import (`grantFolderAccess`); the loaded book is kept in that case.
+    /// Error of the last failed `grantFolderAccess` re-import, or of an `open` that was refused because the
+    /// file's format is not supported; the loaded book is kept in both cases.
     public private(set) var lastError: ImportError?
     public var selectedChapterID: Chapter.ID?
 
@@ -82,13 +83,24 @@ import EbookCore
     }
 
     /// Imports the book at `url`, replacing the current one.
+    ///
+    /// While a book is loaded, a file that cannot be imported at all (unsupported format, empty, unreadable)
+    /// does not replace it: the book and its edits stay and the error is reported in `lastError`.
     public func open(_ url: URL) async {
         importGeneration += 1
         let generation = importGeneration
+        let converter = makeConverter(now())
+        if document != nil {
+            let check = await Self.checkFormat(of: url, using: converter)
+            guard generation == importGeneration else { return }
+            if case .failure(let error) = check {
+                lastError = error
+                return
+            }
+        }
         clearBook()
         state = .loading(fileName: url.lastPathComponent)
 
-        let converter = makeConverter(now())
         let outcome = await Self.importBook(from: url, context: ImportContext(), using: converter, accessing: [url])
         guard generation == importGeneration else { return }
         switch outcome {
@@ -161,6 +173,21 @@ import EbookCore
         defer { accessed.forEach { $0.stopAccessingSecurityScopedResource() } }
         do {
             return .success(try await converter.importBook(from: url, context: context))
+        } catch let error as ImportError {
+            return .failure(error)
+        } catch {
+            return .failure(.unreadable(error.localizedDescription))
+        }
+    }
+
+    /// Detects the file's format off the main actor, inside its security scope.
+    @concurrent private static func checkFormat(of url: URL, using converter: any BookConverting) async -> Result<SourceFormat, ImportError> {
+        let isAccessing = url.startAccessingSecurityScopedResource()
+        defer {
+            if isAccessing { url.stopAccessingSecurityScopedResource() }
+        }
+        do {
+            return .success(try converter.sourceFormat(of: url))
         } catch let error as ImportError {
             return .failure(error)
         } catch {
@@ -247,9 +274,19 @@ import EbookCore
         isApplyingChanges = false
     }
 
+    /// The document with the edited metadata, trimmed. A blank title falls back to the file's own title,
+    /// then to the file name, then to "Book": EPUB and FB2 require one.
     private func editedDocument() -> BookDocument? {
         guard var document else { return nil }
-        document.metadata = BookMetadata(title: title, author: author, language: language)
+        let titles = [title, document.metadata.title, fileURL?.deletingPathExtension().lastPathComponent ?? ""]
+        let exportTitle = titles.lazy
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty } ?? "Book"
+        document.metadata = BookMetadata(
+            title: exportTitle,
+            author: author.trimmingCharacters(in: .whitespacesAndNewlines),
+            language: language.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
         return document
     }
 

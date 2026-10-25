@@ -13,13 +13,20 @@ public struct BookConverter: Sendable {
         self.fixedDate = fixedDate
     }
 
-    public func importBook(from url: URL, context: ImportContext) async throws -> ImportResult {
+    /// The format of the file at `url`, detected from its content.
+    /// - Throws: `ImportError.unreadable`, `.emptyDocument` or `.unsupportedFormat`.
+    public func sourceFormat(of url: URL) throws -> SourceFormat {
         let data: Data
-        do { data = try Data(contentsOf: url) } catch { throw ImportError.unreadable(error.localizedDescription) }
+        do { data = try Data(contentsOf: url, options: .mappedIfSafe) } catch { throw ImportError.unreadable(error.localizedDescription) }
         guard !data.isEmpty else { throw ImportError.emptyDocument }
         guard let format = FormatSniffer.format(of: data, fileExtension: url.pathExtension) else {
             throw ImportError.unsupportedFormat
         }
+        return format
+    }
+
+    public func importBook(from url: URL, context: ImportContext) async throws -> ImportResult {
+        let format = try sourceFormat(of: url)
         var result = try await ImporterRegistry.importer(for: format).importBook(from: url, context: context)
         if result.sourceCover == nil, Self.coverDetectedFormats.contains(format) {
             result.sourceCover = CoverDetector.extractCover(from: &result.document)

@@ -10,6 +10,9 @@ struct BookWorkspaceView: View {
     @State private var isImporterPresented = false
     /// Failure of the last folder-access re-import, shown in an alert; the loaded book stays.
     @State private var folderAccessError: ImportError?
+    /// Failure of opening another file over the loaded book, shown in an alert; the loaded book stays.
+    @State private var openError: ImportError?
+    @State private var isCoverImageUnreadable = false
 
     var body: some View {
         NavigationSplitView {
@@ -48,6 +51,12 @@ struct BookWorkspaceView: View {
         }
         .dropDestination(for: URL.self) { urls, _ in
             guard let url = urls.first else { return false }
+            // An image dropped anywhere on the book becomes its cover rather than replacing the book.
+            if SupportedTypes.file(url, isOneOf: SupportedTypes.coverImages) {
+                setCover(from: url)
+                return true
+            }
+            guard SupportedTypes.file(url, isOneOf: SupportedTypes.inputs) else { return false }
             open(url)
             return true
         }
@@ -59,6 +68,15 @@ struct BookWorkspaceView: View {
         } message: { error in
             Text(ConverterRootView.message(for: error))
         }
+        .alert(
+            Text(.openFileFailed),
+            isPresented: Binding { openError != nil } set: { if !$0 { openError = nil } },
+            presenting: openError
+        ) { _ in
+        } message: { error in
+            Text(ConverterRootView.message(for: error))
+        }
+        .alert(Text(.coverImageUnreadable), isPresented: $isCoverImageUnreadable) {}
         .frame(minWidth: ConverterLayout.workspaceMinSize.width, minHeight: ConverterLayout.workspaceMinSize.height)
         .onAppear {
             WindowGrowth.grow(NSApp.keyWindow ?? NSApp.mainWindow, toContentSize: ConverterLayout.workspaceIdealSize)
@@ -77,8 +95,21 @@ struct BookWorkspaceView: View {
         }.first
     }
 
+    /// Opens `url` in place of the loaded book; if the file cannot be imported at all the book stays and an alert explains why.
     private func open(_ url: URL) {
-        Task { await viewModel.open(url) }
+        Task {
+            await viewModel.open(url)
+            openError = viewModel.state == .loaded ? viewModel.lastError : nil
+        }
+    }
+
+    private func setCover(from url: URL) {
+        Task {
+            guard let data = await CoverDropItem.imageData(at: url), viewModel.setCustomCover(data) else {
+                isCoverImageUnreadable = true
+                return
+            }
+        }
     }
 
     /// Re-imports the book with access to `folder`; on success the warning (and banner) is replaced.

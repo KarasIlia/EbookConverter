@@ -5,6 +5,10 @@ import ConverterFeature
 
 /// Preview-only converter: "imports" a small fixed book and writes placeholder bytes.
 struct PreviewBookConverter: BookConverting {
+    func sourceFormat(of url: URL) throws -> SourceFormat {
+        .txt
+    }
+
     func importBook(from url: URL, context: ImportContext) async throws -> ImportResult {
         let image = await CoverGenerator().makeCover(title: "Illustration", author: "Preview").map(Block.image)
         let chapters = [

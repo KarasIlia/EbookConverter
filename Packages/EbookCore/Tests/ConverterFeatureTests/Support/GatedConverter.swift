@@ -53,6 +53,10 @@ final class GatedConverter: BookConverting {
         writes.withLock { $0.released += 1 }
     }
 
+    func sourceFormat(of url: URL) throws -> SourceFormat {
+        .txt
+    }
+
     func importBook(from url: URL, context: ImportContext) async throws -> ImportResult {
         importsStarted.withLock { $0.append(url) }
         if let folder = context.accessibleFolder {

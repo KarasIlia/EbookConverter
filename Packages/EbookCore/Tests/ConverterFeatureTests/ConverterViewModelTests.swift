@@ -23,12 +23,15 @@ import EbookCore
     private func makeModel(
         cover: ImageAsset? = nil,
         warnings: [ImportWarning] = [],
-        failure: (any Error)? = nil
+        failure: (any Error)? = nil,
+        originalTitle: String? = nil
     ) -> (ConverterViewModel, FakeConverter, FakeCoverGenerator) {
+        var document = document()
+        if let originalTitle { document.metadata.title = originalTitle }
         let result: Result<ImportResult, any Error> = if let failure {
             .failure(failure)
         } else {
-            .success(ImportResult(document: document(), sourceCover: cover, warnings: warnings))
+            .success(ImportResult(document: document, sourceCover: cover, warnings: warnings))
         }
         let converter = FakeConverter(result: result)
         let generator = FakeCoverGenerator()
@@ -260,6 +263,73 @@ import EbookCore
         #expect(converter.recorded.writtenFormats.last == .fb2)
         #expect(converter.recorded.writtenDocuments.last?.metadata == BookMetadata(title: "Edited", author: "Author", language: "en"))
         #expect(converter.recorded.writtenCovers.last == sourceCover)
+    }
+
+    @Test func blankTitleFallsBackToOriginalThenFileName() async throws {
+        let (model, converter, _) = makeModel()
+        await model.open(bookURL)
+        model.title = "  "
+        model.author = "  Лев Толстой "
+        _ = try model.exportData()
+        #expect(converter.recorded.writtenDocuments.last?.metadata.title == "Война и мир")
+        #expect(converter.recorded.writtenDocuments.last?.metadata.author == "Лев Толстой")
+
+        let (untitled, untitledConverter, _) = makeModel(originalTitle: " ")
+        await untitled.open(bookURL)
+        untitled.title = ""
+        _ = try untitled.exportData()
+        #expect(untitledConverter.recorded.writtenDocuments.last?.metadata.title == "My Book")
+
+        model.title = "  Edited  "
+        _ = try model.exportData()
+        #expect(converter.recorded.writtenDocuments.last?.metadata.title == "Edited")
+    }
+
+    @Test func blankTitleExportsNonEmptyTitleWithRealConverter() async throws {
+        let dir = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appending(path: "book.txt")
+        try Data("Chapter 1\n\nSome text of the book.".utf8).write(to: url)
+
+        let model = ConverterViewModel(coverGenerator: FakeCoverGenerator())
+        await model.open(url)
+        model.title = "  "
+        for format in OutputFormat.allCases {
+            model.outputFormat = format
+            let output = dir.appending(path: "out.\(format.fileExtension)")
+            try model.exportData().write(to: output)
+            let reimported = try await BookConverter().importBook(from: output, context: ImportContext())
+            #expect(reimported.document.metadata.title == "book")
+        }
+    }
+
+    @Test func unsupportedFileKeepsLoadedBook() async {
+        let imageURL = URL(filePath: "/tmp/ConverterViewModelTests/cover.jpg")
+        let (model, converter, _) = makeModel()
+        converter.setUnsupported([imageURL])
+        await model.open(bookURL)
+        model.title = "Kept edit"
+        let document = model.document
+
+        await model.open(imageURL)
+        #expect(model.state == .loaded)
+        #expect(model.document == document)
+        #expect(model.title == "Kept edit")
+        #expect(model.lastError == .unsupportedFormat)
+        #expect(converter.recorded.importedURLs == [bookURL])
+
+        await model.open(bookURL)
+        #expect(model.lastError == nil)
+        #expect(converter.recorded.importedURLs == [bookURL, bookURL])
+    }
+
+    @Test func unsupportedFileWithoutBookFails() async {
+        let imageURL = URL(filePath: "/tmp/ConverterViewModelTests/cover.jpg")
+        let (model, converter, _) = makeModel()
+        converter.setUnsupported([imageURL])
+        await model.open(imageURL)
+        #expect(model.state == .failed(.unsupportedFormat))
+        #expect(model.document == nil)
     }
 
     @Test func suggestedFileNameSanitized() async {

@@ -20,6 +20,7 @@ final class FakeConverter: BookConverting {
     private let calls = Mutex(Calls())
     private let failsWrites = Mutex(false)
     private let failsImports = Mutex(false)
+    private let unsupportedURLs = Mutex<Set<URL>>([])
 
     init(result: Result<ImportResult, any Error>) {
         self.result = result
@@ -37,7 +38,18 @@ final class FakeConverter: BookConverting {
         failsWrites.withLock { $0 = fails }
     }
 
+    /// Files whose format is reported as unsupported (by `sourceFormat(of:)` and `importBook`).
+    func setUnsupported(_ urls: Set<URL>) {
+        unsupportedURLs.withLock { $0 = urls }
+    }
+
+    func sourceFormat(of url: URL) throws -> SourceFormat {
+        if unsupportedURLs.withLock({ $0.contains(url) }) { throw ImportError.unsupportedFormat }
+        return .txt
+    }
+
     func importBook(from url: URL, context: ImportContext) async throws -> ImportResult {
+        if unsupportedURLs.withLock({ $0.contains(url) }) { throw ImportError.unsupportedFormat }
         calls.withLock {
             $0.importedURLs.append(url)
             $0.contexts.append(context)
