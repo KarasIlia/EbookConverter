@@ -22,7 +22,7 @@ enum EPUBTemplates {
     """
 
     /// A complete XHTML document. `body` is already-serialized markup.
-    static func xhtml(title: String, language: String, isRightToLeft: Bool, body: String) -> String {
+    static func xhtml(title: String, language: String, isRightToLeft: Bool, stylesheetHref: String = "../style.css", body: String) -> String {
         let lang = XMLEscaping.escape(language)
         let dir = isRightToLeft ? " dir=\"rtl\"" : ""
         return xmlDeclaration + """
@@ -31,7 +31,7 @@ enum EPUBTemplates {
         <head>
         <meta charset="utf-8"/>
         <title>\(XMLEscaping.escape(title))</title>
-        <link rel="stylesheet" type="text/css" href="../style.css"/>
+        <link rel="stylesheet" type="text/css" href="\(stylesheetHref)"/>
         </head>
         <body>
         \(body)
@@ -58,6 +58,9 @@ enum EPUBTemplates {
         let creator = metadata.author.isEmpty
             ? ""
             : "\n    <dc:creator>\(XMLEscaping.escape(metadata.author))</dc:creator>"
+        let guide = hasCover
+            ? "\n  <guide>\n    <reference type=\"cover\" title=\"Cover\" href=\"text/cover.xhtml\"/>\n  </guide>"
+            : ""
         let coverMeta = hasCover ? "\n    <meta name=\"cover\" content=\"cover-image\"/>" : ""
         return xmlDeclaration + """
         <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid" xml:lang="\(XMLEscaping.escape(metadata.language))">
@@ -72,7 +75,7 @@ enum EPUBTemplates {
           </manifest>
           <spine toc="ncx"\(direction)>
         \(spine.map { "    " + $0 }.joined(separator: "\n"))
-          </spine>
+          </spine>\(guide)
         </package>
 
         """
@@ -85,7 +88,7 @@ enum EPUBTemplates {
         \(list)
         </nav>
         """
-        return xhtml(title: title, language: language, isRightToLeft: isRightToLeft, body: body)
+        return xhtml(title: title, language: language, isRightToLeft: isRightToLeft, stylesheetHref: "style.css", body: body)
     }
 
     static func ncx(identifier: String, title: String, depth: Int, navPoints: String) -> String {

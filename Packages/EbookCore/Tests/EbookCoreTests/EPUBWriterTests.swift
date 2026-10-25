@@ -106,6 +106,33 @@ import Testing
         #expect(xml.contains("<spine toc=\"ncx\">\n    <itemref idref=\"cover\"/>"))
     }
 
+    @Test func guideReferencesCoverOnlyWithCover() throws {
+        let with = String(decoding: try extract(makeEPUB(), "OEBPS/content.opf"), as: UTF8.self)
+        #expect(with.contains("<reference type=\"cover\" title=\"Cover\" href=\"text/cover.xhtml\"/>"))
+        let without = String(decoding: try extract(makeEPUB(withCover: false), "OEBPS/content.opf"), as: UTF8.self)
+        #expect(!without.contains("<guide>"))
+    }
+
+    @Test func allInternalLinksResolve() throws {
+        let epub = try makeEPUB()
+        let names = Set(try listing(epub))
+        let pages = names.filter { $0.hasSuffix(".xhtml") }
+        #expect(pages.count == 6)
+        for page in pages {
+            let doc = try XMLDocument(data: extract(epub, page), options: [])
+            let refs = try doc.nodes(forXPath: "//*[local-name()='link']/@href | //*[local-name()='img']/@src").compactMap(\.stringValue)
+            #expect(!refs.isEmpty)
+            let dir = page.split(separator: "/").dropLast().map(String.init)
+            for ref in refs {
+                var parts = dir
+                for part in ref.split(separator: "/") {
+                    if part == ".." { _ = parts.popLast() } else if part != "." { parts.append(String(part)) }
+                }
+                #expect(names.contains(parts.joined(separator: "/")), "\(page) -> \(ref) unresolved")
+            }
+        }
+    }
+
     @Test func navNestsParts() throws {
         let epub = try makeEPUB()
         let nav = try XMLDocument(data: extract(epub, "OEBPS/nav.xhtml"), options: [])
@@ -161,7 +188,7 @@ import Testing
         let jar = ProcessInfo.processInfo.environment["EPUBCHECK_JAR"] ?? ""
         let epub = try makeEPUB()
         try withTempFile(epub) { url in
-            let result = try run("/usr/bin/java", ["-jar", jar, url.path(percentEncoded: false)])
+            let result = try run("/usr/bin/java", ["-jar", jar, "--failonwarnings", url.path(percentEncoded: false)])
             let output = String(decoding: result.output, as: UTF8.self)
             #expect(result.status == 0, "\(output)")
         }
