@@ -40,6 +40,11 @@ public struct PDFImporter: BookImporter {
         }
         guard !chapters.isEmpty else { throw ImportError.emptyDocument }
 
+        var book = BookDocument(metadata: BookMetadata(title: "", author: "", language: "und"), chapters: chapters)
+        let cover = CoverDetector.extractCover(
+            from: &book, pdfFirstPageImageCoverage: Self.firstPageImageCoverage(images, lines: lines)
+        )
+
         var warnings: [ImportWarning] = []
         let language = LanguageDetector.language(of: located.map(\.paragraph.text).joined(separator: "\n"))
         if language == nil { warnings.append(.languageUndetermined) }
@@ -52,7 +57,16 @@ public struct PDFImporter: BookImporter {
             author: Self.attribute(PDFDocumentAttribute.authorAttribute, in: attributes) ?? "",
             language: language ?? "und"
         )
-        return ImportResult(document: BookDocument(metadata: metadata, chapters: chapters), warnings: warnings)
+        book.metadata = metadata
+        return ImportResult(document: book, sourceCover: cover, warnings: warnings)
+    }
+
+    /// Area of the largest first-page image relative to the first page's visible area; `nil` without one.
+    private static func firstPageImageCoverage(_ images: [PDFPlacedImage], lines: [PDFTextLine]) -> Double? {
+        guard let pageSize = lines.first(where: { $0.pageIndex == 0 })?.pageSize,
+              pageSize.width > 0, pageSize.height > 0 else { return nil }
+        let largest = images.filter { $0.pageIndex == 0 }.map { $0.bounds.width * $0.bounds.height }.max()
+        return largest.map { $0 / (pageSize.width * pageSize.height) }
     }
 
     /// `%PDF` must appear within the first 1024 bytes.

@@ -165,6 +165,9 @@ struct PDFImageExtractorTests {
         let above = [
             "It was a bright cold day in April, and the clocks",
             "were striking thirteen and nobody looked up.",
+            "Outside, even through the shut window-pane, the",
+            "world looked cold, and down in the street little",
+            "eddies of wind were whirling dust and torn paper.",
         ]
         let below = [
             "The hallway smelt of boiled cabbage and old rag",
@@ -192,6 +195,7 @@ struct PDFImageExtractorTests {
         let left = [
             "It was a bright cold day in", "April, and the clocks were", "striking thirteen. Winston",
             "Smith, his chin nuzzled into", "his breast, slipped quickly", "through the glass doors.",
+            "Outside the window the world looked cold and grey,", "and nobody was walking in the street.",
         ]
         let right = [
             "The hallway smelt of boiled", "cabbage and old rag mats.", "At one end of it a poster",
@@ -226,7 +230,7 @@ struct PDFImageExtractorTests {
         #expect(result.document.chapters.flatMap(\.blocks).count == 1)
     }
 
-    /// A page-covering image with only a little text (a cover, a full-page illustration) is kept.
+    /// A page-covering image with only a little text is kept; as the first image it becomes the source cover.
     @Test func importerKeepsFullPageImageWithShortText() async throws {
         let body = [
             "It was a bright cold day in April, and the clocks",
@@ -237,11 +241,17 @@ struct PDFImageExtractorTests {
             images: [Self.imageBox(CGRect(x: 0, y: 0, width: 595, height: 842), page: 0)]
         )
         let result = try await PDFImporter().importBook(from: url, context: ImportContext())
-        #expect(result.document.allImages.count == 1)
+        #expect(result.sourceCover != nil)
+        #expect(result.document.allImages.isEmpty)
     }
 
     @Test func importerKeepsImagesOfTextlessPagesInPageOrder() async throws {
-        let first = ["It was a bright cold day in April, and the clocks", "were striking thirteen and nobody looked up."]
+        let first = [
+            "It was a bright cold day in April, and the clocks", "were striking thirteen and nobody looked up.",
+            "Outside, even through the shut window-pane, the",
+            "world looked cold, and down in the street little",
+            "eddies of wind were whirling dust and torn paper.",
+        ]
         let third = ["The hallway smelt of boiled cabbage and old rag", "mats, and the lift had not worked for weeks."]
         let url = try FixtureFactory.pdf(
             pages: [Self.textBoxes(first, top: 700), [], Self.textBoxes(third, top: 700)],
