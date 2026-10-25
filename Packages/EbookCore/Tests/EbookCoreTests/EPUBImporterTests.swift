@@ -20,7 +20,7 @@ import Testing
         #expect(result.sourceCover != nil)
         #expect(result.warnings.isEmpty)
         #expect(zip(imported.leafChapters, original.leafChapters).allSatisfy {
-            Self.stripInvalidXML($1.plainText) == $0.plainText
+            Self.asWritten($1.plainText) == $0.plainText
         })
         // Part's own blocks and inline styles survive.
         #expect(imported.chapters[0].plainText == "Part intro.")
@@ -340,8 +340,9 @@ import Testing
 
     // MARK: - Fixtures
 
-    static func stripInvalidXML(_ text: String) -> String {
-        String(String.UnicodeScalarView(text.unicodeScalars.filter { ![0x0B, 0x0C].contains($0.value) }))
+    /// The text as the writers emit it: line-break controls (U+000B, U+000C, U+2028) become spaces (fixtures are Latin).
+    static func asWritten(_ text: String) -> String {
+        String(String.UnicodeScalarView(text.unicodeScalars.map { [0x0B, 0x0C, 0x2028].contains($0.value) ? " " : $0 }))
     }
 
     private struct OutlineNode: Equatable {
@@ -351,7 +352,7 @@ import Testing
     }
 
     private static func outline(_ chapters: [Chapter]) -> [OutlineNode] {
-        chapters.map { OutlineNode(title: $0.title, text: stripInvalidXML($0.plainText), children: outline($0.children)) }
+        chapters.map { OutlineNode(title: $0.title, text: asWritten($0.plainText), children: outline($0.children)) }
     }
 
     static func write(_ data: Data) throws -> URL {

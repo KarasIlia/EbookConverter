@@ -17,11 +17,17 @@ enum LineJoiner {
             text.removeLast()
         } else if end == "-", text.dropLast().last.map({ !$0.isWhitespace }) ?? false {
             if let nextFirst, ScriptTraits.isLowercaseLetter(nextFirst) { text.removeLast() }
-        } else if let nextFirst, ScriptTraits.isWrittenWithoutSpaces(end), ScriptTraits.isWrittenWithoutSpaces(nextFirst) {
-            // Scripts without word spaces join directly.
+        } else if nextFirst != nil {
+            text += separator(between: end, and: nextFirst)
         } else {
             text += " "
         }
+    }
+
+    /// The word separator between two characters: none when both are in scripts written without spaces, else a space.
+    static func separator(between previous: Character?, and next: Character?) -> String {
+        guard let previous, let next else { return " " }
+        return ScriptTraits.isWrittenWithoutSpaces(previous) && ScriptTraits.isWrittenWithoutSpaces(next) ? "" : " "
     }
 
     /// `text` followed by `next` (leading whitespace of `next` dropped).

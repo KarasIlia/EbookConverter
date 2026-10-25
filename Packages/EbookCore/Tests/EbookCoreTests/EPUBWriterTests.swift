@@ -44,9 +44,16 @@ import Testing
     }
 
     @Test func escapesSpecialAndInvalidChars() {
-        #expect(XMLEscaping.escape("a&b<c>\"d'\u{0B}e") == "a&amp;b&lt;c&gt;&quot;d&apos;e")
-        #expect(XMLEscaping.escape("x\u{00}\u{08}\u{0C}\u{0E}\u{1F}\u{FFFE}\u{FFFF}y\n\t\r") == "xy\n\t\r")
+        #expect(XMLEscaping.escape("a&b<c>\"d'e") == "a&amp;b&lt;c&gt;&quot;d&apos;e")
+        #expect(XMLEscaping.escape("x\u{00}\u{08}\u{0E}\u{1F}\u{FFFE}\u{FFFF}y\n\t\r") == "xy\n\t\r")
         #expect(XMLEscaping.escape("Привет 日本語") == "Привет 日本語")
+    }
+
+    @Test func lineBreakControlsBecomeSpaces() {
+        #expect(XMLEscaping.escape("Vertical\u{0B}tab") == "Vertical tab")
+        #expect(XMLEscaping.escape("form\u{0C}feed line\u{2028}separator") == "form feed line separator")
+        #expect(XMLEscaping.escape("中\u{0B}文\u{2028}字") == "中文字")
+        #expect(XMLEscaping.escape("\u{0B}") == " ")
     }
 
     @Test func archiveContainsExpectedEntries() throws {
@@ -82,7 +89,7 @@ import Testing
         #expect(chapter.contains("Fish &amp; &lt;chips&gt;"))
         #expect(chapter.contains("<strong>bold</strong>"))
         let chapter3 = String(decoding: try extract(epub, "OEBPS/text/chapter-003.xhtml"), as: UTF8.self)
-        #expect(chapter3.contains("Verticaltab removed."))
+        #expect(chapter3.contains("Vertical tab removed."))
         #expect(chapter3.contains("<h3>Subheading</h3>"))
     }
 

@@ -82,6 +82,17 @@ import Testing
         #expect(runs.contains { $0.text.hasPrefix("plain") && !$0.isBold && !$0.isItalic })
     }
 
+    @Test func flattenerTurnsWordBreakControlsIntoSpacesAndParagraphs() {
+        let text = NSAttributedString(
+            string: "One\u{0B}two\u{0C}Three\u{2028}four 中\u{0B}文",
+            attributes: [.font: Self.font(12)]
+        )
+        let paragraphs = AttributedStringFlattener.items(from: text).compactMap { item -> String? in
+            if case .paragraph(let paragraph) = item { paragraph.text } else { nil }
+        }
+        #expect(paragraphs == ["One two", "Three four 中文"])
+    }
+
     @Test func flattenerUsesHeaderLevelAndDominantSize() {
         let style = NSMutableParagraphStyle()
         style.headerLevel = 2

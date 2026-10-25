@@ -20,7 +20,7 @@ import Testing
         #expect(result.sourceCover != nil)
         #expect(result.warnings.isEmpty)
         #expect(zip(imported.leafChapters, original.leafChapters).allSatisfy {
-            EPUBImporterTests.stripInvalidXML($1.plainText) == $0.plainText
+            EPUBImporterTests.asWritten($1.plainText) == $0.plainText
         })
         // The part's own blocks come back from the leading untitled section.
         #expect(imported.chapters[0].plainText == "Part intro.")
@@ -234,7 +234,7 @@ import Testing
 
     private static func outline(_ chapters: [Chapter]) -> [OutlineNode] {
         chapters.map {
-            OutlineNode(title: $0.title, text: EPUBImporterTests.stripInvalidXML($0.plainText), children: outline($0.children))
+            OutlineNode(title: $0.title, text: EPUBImporterTests.asWritten($0.plainText), children: outline($0.children))
         }
     }
 

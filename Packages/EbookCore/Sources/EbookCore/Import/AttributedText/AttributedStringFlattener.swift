@@ -22,6 +22,7 @@ public enum AttributedStringFlattener {
         from string: NSAttributedString,
         image: (_ index: Int, _ attachment: NSTextAttachment?) -> ImageAsset?
     ) -> [StructuredItem] {
+        let string = normalizingBreakControls(string)
         let text = string.string as NSString
         var items: [StructuredItem] = []
         var attachmentIndex = 0
@@ -70,6 +71,33 @@ public enum AttributedStringFlattener {
             flush()
         }
         return items
+    }
+
+    /// Word processors separate words with U+000B (manual line break) and U+2028, and pages with U+000C;
+    /// XML drops the controls, which would glue words. Line breaks become a word separator, form feeds paragraph breaks.
+    private static func normalizingBreakControls(_ string: NSAttributedString) -> NSAttributedString {
+        let source = string.string as NSString
+        let controls = CharacterSet(charactersIn: "\u{0B}\u{0C}\u{2028}")
+        guard source.rangeOfCharacter(from: controls).location != NSNotFound else { return string }
+        let result = NSMutableAttributedString(attributedString: string)
+        let text = result.mutableString
+        func character(at index: Int) -> Character? {
+            guard index >= 0, index < text.length, let scalar = Unicode.Scalar(text.character(at: index)) else { return nil }
+            return Character(scalar)
+        }
+        // Back to front, so replacements do not shift the positions still to visit.
+        var index = text.length - 1
+        while index >= 0 {
+            let unit = text.character(at: index)
+            if unit == 0x0C {
+                text.replaceCharacters(in: NSRange(location: index, length: 1), with: "\n")
+            } else if unit == 0x0B || unit == 0x2028 {
+                let separator = LineJoiner.separator(between: character(at: index - 1), and: character(at: index + 1))
+                text.replaceCharacters(in: NSRange(location: index, length: 1), with: separator)
+            }
+            index -= 1
+        }
+        return result
     }
 
     private static func append(
