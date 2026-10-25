@@ -16,20 +16,9 @@ enum CoverDropItem: Transferable {
         ProxyRepresentation(importing: { (url: URL) in CoverDropItem.file(url) })
     }
 
-    /// Whether the item looks like an accepted image; other dropped files are refused.
-    var isAcceptable: Bool {
-        switch self {
-        case .imageData:
-            true
-        case .file(let url):
-            UTType(filenameExtension: url.pathExtension).map { type in
-                SupportedTypes.coverImages.contains(where: type.conforms(to:))
-            } ?? false
-        }
-    }
-
     /// The image bytes, or `nil` for a file that is not one of `SupportedTypes.coverImages` or cannot be read.
-    @concurrent func imageData() async -> Data? {
+    /// Synchronous so a drop can be refused when the item is unreadable; dropped image files are small.
+    func loadImageData() -> Data? {
         switch self {
         case .imageData(let data):
             data
@@ -38,7 +27,7 @@ enum CoverDropItem: Transferable {
         }
     }
 
-    /// Reads an image file chosen or dropped by the user, inside its security scope.
+    /// Reads an image file chosen by the user, inside its security scope, off the main actor.
     @concurrent static func imageData(at url: URL) async -> Data? {
         readImageFile(at: url)
     }

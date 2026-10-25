@@ -171,6 +171,23 @@
         }
       }
     },
+    "coverImageUnreadable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't open the image"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось открыть картинку"
+          }
+        }
+      }
+    },
     "dropFileHere": {
       "extractionState": "manual",
       "localizations": {

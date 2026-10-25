@@ -198,6 +198,20 @@ import Testing
         #expect(result.document.allImages.isEmpty)
     }
 
+    @Test func htmlFolderAccessForSiblingImageFolderSuggestsCommonParent() async throws {
+        let root = try folder()
+        let book = root.appending(path: "book")
+        try FileManager.default.createDirectory(at: book, withIntermediateDirectories: true)
+        let html = "<html><body><h2>A</h2><p>\(Self.body)</p><img src=\"../pics/red.png\"></body></html>"
+        let url = book.appending(path: "book.html")
+        try Data(html.utf8).write(to: url)
+        let result = try await importBook(url)
+        let folders = result.warnings.compactMap { warning in
+            if case .imagesNeedFolderAccess(let folder) = warning { folder.resolvingSymlinksInPath().pathComponents } else { nil }
+        }
+        #expect(folders == [root.resolvingSymlinksInPath().pathComponents])
+    }
+
     @Test func htmlDeclaredLegacyCharsetDecoded() async throws {
         var data = Data(#"<html><head><meta http-equiv="Content-Type" content="text/html; charset=windows-1251"></head><body><h2>"#.utf8)
         data.append(try #require("Глава 1".data(using: .windowsCP1251)))

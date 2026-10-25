@@ -106,6 +106,8 @@ import EbookCore
     /// and the error is reported in `lastError`.
     public func grantFolderAccess(_ folder: URL) async {
         guard let fileURL, let converter else { return }
+        // A superseded grant returns without an outcome; it must not leave an earlier failure behind.
+        lastError = nil
         importGeneration += 1
         let generation = importGeneration
         let outcome = await Self.importBook(
@@ -122,10 +124,12 @@ import EbookCore
     }
 
     /// Uses the image in `data` as the cover. Data that is not a readable image is ignored.
-    public func setCustomCover(_ data: Data) {
-        guard let asset = ImageNormalizer.normalize(data, id: "cover") else { return }
+    /// - Returns: `false` if `data` is not a readable image.
+    @discardableResult public func setCustomCover(_ data: Data) -> Bool {
+        guard let asset = ImageNormalizer.normalize(data, id: "cover") else { return false }
         customCover = asset
         refreshCover()
+        return true
     }
 
     /// Drops the custom cover: back to the file's cover if any, else a generated one.

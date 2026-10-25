@@ -80,14 +80,14 @@ import EbookCore
         #expect(model.cover == sourceCover)
         #expect(generator.requests.isEmpty)
 
-        model.setCustomCover(TestImages.png(width: 30, height: 40))
+        #expect(model.setCustomCover(TestImages.png(width: 30, height: 40)))
         #expect(model.coverSource == .custom)
         let custom = try #require(model.cover)
         #expect(custom.id == "cover")
         #expect(custom.contentType == .png)
         #expect(custom.pixelWidth == 30 && custom.pixelHeight == 40)
 
-        model.setCustomCover(Data("not an image".utf8))
+        #expect(!model.setCustomCover(Data("not an image".utf8)))
         #expect(model.coverSource == .custom)
         #expect(model.cover == custom)
 
@@ -306,6 +306,32 @@ import EbookCore
         converter.setFailsImports(false)
         await model.grantFolderAccess(URL(filePath: "/tmp", directoryHint: .isDirectory))
         #expect(model.lastError == nil)
+    }
+
+    @Test func supersededGrantAfterFailedGrantLeavesNoStaleError() async {
+        let failing = URL(filePath: "/tmp/failing", directoryHint: .isDirectory)
+        let first = URL(filePath: "/tmp/first", directoryHint: .isDirectory)
+        let second = URL(filePath: "/tmp/second", directoryHint: .isDirectory)
+        let converter = GatedConverter(gatedFolders: [first, second], failingFolder: failing)
+        let model = ConverterViewModel(makeConverter: { _ in converter }, coverGenerator: FakeCoverGenerator())
+        await model.open(bookURL)
+
+        await model.grantFolderAccess(failing)
+        #expect(model.lastError == .unreadable("denied"))
+
+        let superseded = Task { await model.grantFolderAccess(first) }
+        await waitUntil { converter.startedFolders.contains(first) }
+        let latest = Task { await model.grantFolderAccess(second) }
+        await waitUntil { converter.startedFolders.contains(second) }
+
+        converter.releaseImports(withFolder: first)
+        await superseded.value
+        #expect(model.lastError == nil, "the superseded grant must not leave the earlier failure behind")
+
+        converter.releaseImports(withFolder: second)
+        await latest.value
+        #expect(model.lastError == nil)
+        #expect(model.state == .loaded)
     }
 
     @Test func factoryReceivesOpenTime() async {

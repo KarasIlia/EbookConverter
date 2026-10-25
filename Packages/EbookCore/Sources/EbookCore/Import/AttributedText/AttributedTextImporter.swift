@@ -136,18 +136,21 @@ public struct AttributedTextImporter: BookImporter {
 
         var loaded = parsed
         if Self.nonEmpty(loaded.title) == nil { loaded.title = Self.titleElement(in: source) }
-        var needsFolderAccess = false
+        var inaccessibleImages: [URL] = []
         var remote = 0
         var missing = max(placed - outcomes.count, 0)
         for (index, outcome) in outcomes.enumerated() {
             switch outcome {
             case .loaded: if index >= placed { missing += 1 }
-            case .needsFolderAccess: needsFolderAccess = true
+            case .needsFolderAccess(let target): inaccessibleImages.append(target)
             case .remote: remote += 1
             case .missing: missing += 1
             }
         }
-        if needsFolderAccess { loaded.warnings.append(.imagesNeedFolderAccess(folder: url.deletingLastPathComponent())) }
+        if !inaccessibleImages.isEmpty {
+            let folder = HTMLImageResolver.folderCovering(inaccessibleImages, relativeTo: url)
+            loaded.warnings.append(.imagesNeedFolderAccess(folder: folder))
+        }
         if remote > 0 { loaded.warnings.append(.remoteImagesSkipped(count: remote)) }
         if missing > 0 { loaded.warnings.append(.imagesUnavailable(count: missing)) }
         return loaded

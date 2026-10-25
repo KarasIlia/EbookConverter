@@ -97,6 +97,27 @@ import Foundation
         #expect(needs.count == 1)
     }
 
+    /// Path components of the folder suggested by the `imagesNeedFolderAccess` warning, symlinks resolved.
+    private func suggestedFolder(_ result: ImportResult) -> [String]? {
+        result.warnings.lazy.compactMap { warning in
+            if case .imagesNeedFolderAccess(let folder) = warning { folder.resolvingSymlinksInPath().pathComponents } else { nil }
+        }.first
+    }
+
+    @Test func folderAccessForSiblingImageFolderSuggestsCommonParent() async throws {
+        let root = try folder()
+        let book = root.appending(path: "book")
+        try FileManager.default.createDirectory(at: book, withIntermediateDirectories: true)
+        let result = try await importBook("## A\n\n![x](../pics/red.png)\n\n![y](same.png)", in: book)
+        #expect(suggestedFolder(result) == root.resolvingSymlinksInPath().pathComponents)
+    }
+
+    @Test func folderAccessForSameFolderImageSuggestsDocumentFolder() async throws {
+        let dir = try folder()
+        let result = try await importBook("## A\n\n![x](nope.png)\n\n![y](sub/nope.png)", in: dir)
+        #expect(suggestedFolder(result) == dir.resolvingSymlinksInPath().pathComponents)
+    }
+
     @Test func languageDetectedOrUndetermined() async throws {
         let result = try await importBook("## A\n\n\(Self.english)")
         #expect(result.document.metadata.language == "en")

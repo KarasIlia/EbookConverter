@@ -35,8 +35,9 @@ public struct MarkdownImporter: BookImporter {
         guard !built.chapters.isEmpty else { throw ImportError.emptyDocument }
 
         var warnings: [ImportWarning] = []
-        if collector.needsFolderAccess {
-            warnings.append(.imagesNeedFolderAccess(folder: url.deletingLastPathComponent()))
+        if !collector.inaccessibleImages.isEmpty {
+            let folder = HTMLImageResolver.folderCovering(collector.inaccessibleImages, relativeTo: url)
+            warnings.append(.imagesNeedFolderAccess(folder: folder))
         }
         if collector.remoteCount > 0 { warnings.append(.remoteImagesSkipped(count: collector.remoteCount)) }
         if collector.missingCount > 0 { warnings.append(.imagesUnavailable(count: collector.missingCount)) }
@@ -66,7 +67,8 @@ private struct Collector {
     let accessibleFolder: URL?
 
     private(set) var items: [StructuredItem] = []
-    private(set) var needsFolderAccess = false
+    /// Locations of images that could not be read without folder access.
+    private(set) var inaccessibleImages: [URL] = []
     private(set) var remoteCount = 0
     private(set) var missingCount = 0
 
@@ -135,7 +137,7 @@ private struct Collector {
         case .loaded(let asset):
             imageCount += 1
             items.append(.image(asset))
-        case .needsFolderAccess: needsFolderAccess = true
+        case .needsFolderAccess(let target): inaccessibleImages.append(target)
         case .remote: remoteCount += 1
         case .missing: missingCount += 1
         }

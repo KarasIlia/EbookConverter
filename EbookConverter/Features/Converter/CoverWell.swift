@@ -7,13 +7,14 @@ import EbookCore
 struct CoverWell: View {
     let cover: ImageAsset?
     let source: CoverSource
-    /// Called with the bytes of an image the user dropped or chose.
-    let onSetCover: @MainActor (Data) -> Void
+    /// Called with the bytes of an image the user dropped or chose; returns `false` if they are not a readable image.
+    let onSetCover: @MainActor (Data) -> Bool
     let onReset: @MainActor () -> Void
 
     @State private var isHovering = false
     @State private var isTargeted = false
     @State private var isImporterPresented = false
+    @State private var isImageUnreadable = false
 
     var body: some View {
         VStack {
@@ -24,9 +25,9 @@ struct CoverWell: View {
                 .accessibilityAddTraits(.isImage)
                 .onHover { isHovering = $0 }
                 .dropDestination(for: CoverDropItem.self) { items, _ in
-                    guard let item = items.first, item.isAcceptable else { return false }
-                    Task {
-                        if let data = await item.imageData() { onSetCover(data) }
+                    guard let data = items.first?.loadImageData(), onSetCover(data) else {
+                        isImageUnreadable = true
+                        return false
                     }
                     return true
                 } isTargeted: { targeted in
@@ -52,9 +53,13 @@ struct CoverWell: View {
         .fileImporter(isPresented: $isImporterPresented, allowedContentTypes: SupportedTypes.coverImages) { result in
             guard case .success(let url) = result else { return }
             Task {
-                if let data = await CoverDropItem.imageData(at: url) { onSetCover(data) }
+                guard let data = await CoverDropItem.imageData(at: url), onSetCover(data) else {
+                    isImageUnreadable = true
+                    return
+                }
             }
         }
+        .alert(Text(.coverImageUnreadable), isPresented: $isImageUnreadable) {}
     }
 
     private var caption: LocalizedStringResource {
@@ -69,21 +74,21 @@ struct CoverWell: View {
 #if DEBUG
 #Preview("Generated") {
     @Previewable @State var cover = CoverGenerator().makeCover(title: "Sample Book", author: "Jane Doe")
-    CoverWell(cover: cover, source: .generated, onSetCover: { _ in }, onReset: {})
+    CoverWell(cover: cover, source: .generated, onSetCover: { _ in true }, onReset: {})
         .padding()
         .frame(width: 300)
 }
 
 #Preview("From file") {
     @Previewable @State var cover = CoverGenerator().makeCover(title: "Sample Book", author: "Jane Doe")
-    CoverWell(cover: cover, source: .fromFile, onSetCover: { _ in }, onReset: {})
+    CoverWell(cover: cover, source: .fromFile, onSetCover: { _ in true }, onReset: {})
         .padding()
         .frame(width: 300)
 }
 
 #Preview("Custom") {
     @Previewable @State var cover = CoverGenerator().makeCover(title: "Sample Book", author: "Jane Doe")
-    CoverWell(cover: cover, source: .custom, onSetCover: { _ in }, onReset: {})
+    CoverWell(cover: cover, source: .custom, onSetCover: { _ in true }, onReset: {})
         .padding()
         .frame(width: 300)
 }

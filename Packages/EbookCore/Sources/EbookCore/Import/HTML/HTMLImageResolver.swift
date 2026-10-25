@@ -38,9 +38,23 @@ public enum HTMLImageResolver {
         defer { if scoped { accessibleFolder?.stopAccessingSecurityScopedResource() } }
 
         guard let data = try? Data(contentsOf: target) else {
-            return accessibleFolder == nil ? .needsFolderAccess : .missing
+            return accessibleFolder == nil ? .needsFolderAccess(target) : .missing
         }
         guard let asset = ImageNormalizer.normalize(data, id: id) else { return .missing }
         return .loaded(asset)
+    }
+
+    /// The folder to ask access for: the document's folder, or its nearest ancestor that also contains
+    /// every unreadable image in `targets` (`../pics/a.png` → the parent of the document's folder).
+    public static func folderCovering(_ targets: [URL], relativeTo fileURL: URL) -> URL {
+        var folder = fileURL.deletingLastPathComponent()
+        let targetComponents = targets.map(\.standardizedFileURL.pathComponents)
+        while true {
+            let components = folder.standardizedFileURL.pathComponents
+            if components.count <= 1 || targetComponents.allSatisfy({ $0.starts(with: components) }) {
+                return folder
+            }
+            folder = folder.standardizedFileURL.deletingLastPathComponent()
+        }
     }
 }
