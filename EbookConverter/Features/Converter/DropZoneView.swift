@@ -57,7 +57,7 @@ struct DropZoneView: View {
             }
         }
         .padding()
-        .frame(minWidth: 480, minHeight: 360)
+        .frame(minWidth: ConverterLayout.compactMinSize.width, minHeight: ConverterLayout.compactMinSize.height)
         .dropDestination(for: URL.self) { urls, _ in
             guard let url = urls.first else { return false }
             onOpen(url)

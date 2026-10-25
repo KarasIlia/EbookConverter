@@ -17,11 +17,9 @@ struct ConverterRootView: View {
                 ProgressView {
                     Text(.openingFile(fileName))
                 }
-                .frame(minWidth: 480, minHeight: 360)
+                .frame(minWidth: ConverterLayout.compactMinSize.width, minHeight: ConverterLayout.compactMinSize.height)
             case .loaded:
-                // Replaced by the three-column book editor in Task 18.
-                Text(.bookLoaded)
-                    .frame(minWidth: 480, minHeight: 360)
+                BookWorkspaceView(viewModel: viewModel)
             }
         }
         .containerBackground(.thinMaterial, for: .window)

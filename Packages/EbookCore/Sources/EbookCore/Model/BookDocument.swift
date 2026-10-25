@@ -21,6 +21,18 @@ extension BookDocument {
         return chapters.flatMap(leaves(of:))
     }
 
+    /// The chapter or part with `id`, searched depth-first through nested chapters.
+    public func chapter(withID id: Chapter.ID) -> Chapter? {
+        func find(in chapters: [Chapter]) -> Chapter? {
+            for chapter in chapters {
+                if chapter.id == id { return chapter }
+                if let found = find(in: chapter.children) { return found }
+            }
+            return nil
+        }
+        return find(in: chapters)
+    }
+
     /// Every image in the book, in reading order, including those in nested chapters.
     public var allImages: [ImageAsset] {
         func images(in chapter: Chapter) -> [ImageAsset] {

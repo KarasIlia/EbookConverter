@@ -19,6 +19,19 @@ import UniformTypeIdentifiers
         #expect(doc.leafChapters.map(\.title) == ["A", "B", "C"])
     }
 
+    @Test func chapterWithIDFindsNestedChapters() {
+        let a = Chapter(title: "A")
+        let part = Chapter(title: "Part", children: [Chapter(title: "Inner", children: [a])])
+        let c = Chapter(title: "C")
+        let doc = BookDocument(
+            metadata: BookMetadata(title: "T", author: "X", language: "en"),
+            chapters: [part, c])
+        #expect(doc.chapter(withID: a.id)?.title == "A")
+        #expect(doc.chapter(withID: part.id)?.title == "Part")
+        #expect(doc.chapter(withID: c.id)?.title == "C")
+        #expect(doc.chapter(withID: UUID()) == nil)
+    }
+
     @Test func allImagesCollectsNested() {
         let child = Chapter(title: "Child", blocks: [.image(image("i1")), .paragraph([InlineRun("x")])])
         let part = Chapter(title: "Part", children: [child])
@@ -49,5 +62,6 @@ import UniformTypeIdentifiers
         #expect(OutputFormat.fb2.fileExtension == "fb2")
         #expect(OutputFormat.epub.contentType == .epub)
         #expect(OutputFormat.fb2.contentType.identifier == "ru.fictionbook.fb2")
+        #expect(OutputFormat.fb2.contentType.conforms(to: .xml))
     }
 }
