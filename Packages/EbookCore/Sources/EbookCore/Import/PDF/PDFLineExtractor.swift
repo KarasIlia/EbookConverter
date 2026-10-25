@@ -15,7 +15,12 @@ public enum PDFLineExtractor {
     private static func lines(on page: PDFPage, pageIndex: Int) -> [PDFTextLine] {
         guard let pageString = page.string, !pageString.isEmpty else { return [] }
         let attributed = page.attributedString
-        let pageSize = page.bounds(for: .mediaBox).size
+        // PDFKit selection bounds are in unrotated media-box space; normalise them to the visible page
+        // (crop box origin at 0,0, rotation applied) so `bounds` always lies within `pageSize`.
+        let crop = page.bounds(for: .cropBox)
+        let rotation = ((page.rotation % 360) + 360) % 360
+        let pageSize = rotation == 90 || rotation == 270
+            ? CGSize(width: crop.height, height: crop.width) : crop.size
         let nsString = pageString as NSString
         var result: [PDFTextLine] = []
 
@@ -25,23 +30,42 @@ public enum PDFLineExtractor {
             guard range.length > 0,
                   let bounds = page.selection(for: range)?.bounds(for: page),
                   !bounds.isEmpty else { return }
+            let visible = visibleBounds(bounds, crop: crop, rotation: rotation)
+            guard !visible.isNull, !visible.isEmpty else { return }
             let (runs, fontSize) = styledRuns(in: attributed, range: range, fallback: nsString.substring(with: range))
             let text = runs.map(\.text).joined()
             guard !text.allSatisfy(\.isWhitespace) else { return }
             result.append(PDFTextLine(
                 text: text, runs: runs, pageIndex: pageIndex,
-                bounds: bounds, fontSize: fontSize, pageSize: pageSize
+                bounds: visible, fontSize: fontSize, pageSize: pageSize
             ))
         }
         return result
     }
 
-    private static func trimmed(_ range: NSRange, in string: NSString) -> NSRange {
+    /// Maps a media-box-space rect to the displayed page: clipped to the crop box, shifted to the origin, rotated.
+    private static func visibleBounds(_ rect: CGRect, crop: CGRect, rotation: Int) -> CGRect {
+        let clipped = rect.intersection(crop)
+        guard !clipped.isNull else { return .null }
+        let x = clipped.minX - crop.minX, y = clipped.minY - crop.minY
+        let w = clipped.width, h = clipped.height
+        switch rotation {
+        case 90: return CGRect(x: y, y: crop.width - (x + w), width: h, height: w)
+        case 180: return CGRect(x: crop.width - (x + w), y: crop.height - (y + h), width: w, height: h)
+        case 270: return CGRect(x: crop.height - (y + h), y: x, width: h, height: w)
+        default: return CGRect(x: x, y: y, width: w, height: h)
+        }
+    }
+
+    static func trimmed(_ range: NSRange, in string: NSString) -> NSRange {
         var start = range.location
         var end = range.location + range.length
-        let whitespace = CharacterSet.whitespacesAndNewlines
-        while start < end, whitespace.contains(Unicode.Scalar(string.character(at: start)) ?? " ") { start += 1 }
-        while end > start, whitespace.contains(Unicode.Scalar(string.character(at: end - 1)) ?? " ") { end -= 1 }
+        // A UTF-16 surrogate half has no scalar of its own, so it is never whitespace.
+        func isWhitespace(_ unit: unichar) -> Bool {
+            Unicode.Scalar(unit).map { CharacterSet.whitespacesAndNewlines.contains($0) } ?? false
+        }
+        while start < end, isWhitespace(string.character(at: start)) { start += 1 }
+        while end > start, isWhitespace(string.character(at: end - 1)) { end -= 1 }
         return NSRange(location: start, length: end - start)
     }
 
