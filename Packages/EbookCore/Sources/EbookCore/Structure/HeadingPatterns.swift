@@ -55,7 +55,7 @@ public enum HeadingPatterns {
         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         let folded = fold(trimmed)
-        let endsInSentence = trimmed.last.map(sentenceTerminals.contains) ?? false
+        let endsInSentence = trimmed.last.map(ScriptTraits.isSentenceTerminal) ?? false
 
         if let wordToken = keywordMatch(in: folded, keywords: foldedParts) {
             return (.part, wordToken && endsInSentence)
@@ -130,11 +130,6 @@ public enum HeadingPatterns {
 
     private static let cjkNumerals: Set<Character> = Set("0123456789０１２３４５６７８９一二三四五六七八九十百千零〇两")
     private static let cjkChapterMarks: Set<Character> = ["章", "回", "节", "節"]
-    /// Sentence-ending punctuation across scripts (Latin, CJK, Arabic, Urdu, Devanagari, Ethiopic, Armenian).
-    private static let sentenceTerminals: Set<Character> = [
-        ".", "!", "?", "…", "‼", "⁇", "⁈", "⁉", "。", "！", "？", "．", "؟", "۔", "।", "॥", "።", "։",
-    ]
-
     /// `第` + numerals + `章/回/节/節`, optionally followed by a title that is not a sentence.
     private static func matchesCJKChapter(_ line: String) -> Bool {
         guard line.first == "第" else { return false }
@@ -161,7 +156,7 @@ public enum HeadingPatterns {
 
     private static func isTitleTail(_ tail: Substring) -> Bool {
         guard let last = tail.last else { return true }
-        return !sentenceTerminals.contains(last)
+        return !ScriptTraits.isSentenceTerminal(last)
     }
 
     private static func matchesStandalone(_ folded: String) -> Bool {
