@@ -5,6 +5,9 @@ public struct TXTImporter: BookImporter {
     /// Longest all-capitals line still treated as a heading.
     private static let maxCapitalsHeadingLength = 60
 
+    /// If more than this share of paragraphs look like ALL-CAPS headings, none is treated as one.
+    private static let maxCapitalsShare = 0.2
+
     public init() {}
 
     public func importBook(from url: URL, context: ImportContext) async throws -> ImportResult {
@@ -13,14 +16,17 @@ public struct TXTImporter: BookImporter {
         guard let decoded = TextEncodingDetector.decode(data) else {
             throw ImportError.unreadable("Unrecognized text encoding")
         }
-        let text = MojibakeRepair.repair(decoded)
-        let paragraphs = Self.paragraphs(in: text)
+        let paragraphs = Self.paragraphs(in: decoded)
         guard !paragraphs.isEmpty else { throw ImportError.emptyDocument }
 
-        let items = paragraphs.map { paragraph in
+        // Plays and scripts have many ALL-CAPS speaker names; those are not headings.
+        let capitals = paragraphs.map(Self.isCapitalsHeading)
+        let capitalsShare = Double(capitals.count { $0 }) / Double(paragraphs.count)
+        let useCapitalsHints = capitalsShare <= Self.maxCapitalsShare
+        let items = zip(paragraphs, capitals).map { paragraph, isCapitals in
             StructuredItem.paragraph(StyledParagraph(
                 runs: [InlineRun(paragraph)],
-                headingLevelHint: Self.isCapitalsHeading(paragraph) ? 2 : nil
+                headingLevelHint: useCapitalsHints && isCapitals ? 2 : nil
             ))
         }
         let built = StructureBuilder.build(items)

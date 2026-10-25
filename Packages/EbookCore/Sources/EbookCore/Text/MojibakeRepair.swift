@@ -65,16 +65,40 @@ public enum MojibakeRepair {
         return (total == 0 ? 1 : Double(coherent) / Double(total), letters)
     }
 
+    /// Typographic punctuation that may open a word (`“Hello`, `«Привет`, `¿Qué`).
+    private static let openingPunctuation: Set<Character> = [
+        "“", "”", "„", "«", "»", "‹", "›", "‘", "‚", "—", "–", "…", "¿", "¡", "•", "§",
+    ]
+    /// Typographic punctuation that may close a word (`world”`, `Привет!»`, `end…`).
+    private static let closingPunctuation: Set<Character> = openingPunctuation.union(["’", "®", "™", "°", "©"])
+    /// Non-ASCII punctuation that may sit inside a word (`L’été`, `word—word`).
+    private static let interiorPunctuation: Set<Character> = ["’", "ʼ", "—", "–", "‑", "·", "…"]
+    /// Letters that signal a wrong decoding when they appear in running text (Serbian/Macedonian
+    /// capitals and lower-case forms that Mac Cyrillic produces for Windows-1251 capitals).
+    private static let implausibleLetters: Set<Character> = ["Ђ", "Ѓ", "Љ", "Њ", "Ћ", "Ќ", "Џ", "ђ", "ѓ", "љ", "њ", "ћ", "ќ", "џ"]
+
+    /// A word is coherent when its letters share the dominant script, it has no implausible letters, no
+    /// upper-case letter follows a lower-case one, and non-ASCII punctuation appears only where
+    /// typography puts it: opening quotes before, closing quotes and dashes after, apostrophes inside.
     private static func isCoherent(_ word: Substring, dominant: ScriptTraits.Script) -> Bool {
+        let characters = Array(word)
+        guard let first = characters.firstIndex(where: { $0.isLetter || $0.isNumber }),
+              let last = characters.lastIndex(where: { $0.isLetter || $0.isNumber }) else { return true }
+        for character in characters[..<first] where !character.isASCII && !openingPunctuation.contains(character) {
+            return false
+        }
+        for character in characters[(last + 1)...] where !character.isASCII && !closingPunctuation.contains(character) {
+            return false
+        }
         var previousWasLower = false
-        for character in word {
+        for character in characters[first...last] {
             if let script = ScriptTraits.script(of: character) {
-                if script != dominant { return false }
+                if script != dominant || implausibleLetters.contains(character) { return false }
                 if previousWasLower && character.isUppercase { return false }
                 previousWasLower = character.isLowercase
             } else {
                 previousWasLower = false
-                if !character.isASCII && !character.isNumber { return false }
+                if !character.isASCII && !character.isNumber && !interiorPunctuation.contains(character) { return false }
             }
         }
         return true

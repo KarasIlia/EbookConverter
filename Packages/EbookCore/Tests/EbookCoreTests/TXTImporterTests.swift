@@ -53,8 +53,15 @@ import Foundation
 
     @Test func uppercaseShortLineBecomesHeading() async throws {
         let p = TextEncodingTests.russian
-        let result = try await importBook("\(p)\n\nПОСВЯЩЕНИЕ\n\n\(p)")
+        let result = try await importBook("\(p)\n\nПОСВЯЩЕНИЕ\n\n\(p)\n\n\(p)\n\n\(p)\n\n\(p)")
         #expect(result.document.chapters.map(\.title).contains("ПОСВЯЩЕНИЕ"))
+    }
+
+    @Test func manyCapitalsLinesAreSpeakerNamesNotHeadings() async throws {
+        let line = "To be, or not to be, that is the question."
+        let text = (0..<5).map { _ in "HAMLET\n\n\(line)" }.joined(separator: "\n\n")
+        let result = try await importBook(text)
+        #expect(result.warnings.contains(.noChaptersFound))
     }
 
     @Test func uncasedScriptNeverGetsUppercaseHint() async throws {
