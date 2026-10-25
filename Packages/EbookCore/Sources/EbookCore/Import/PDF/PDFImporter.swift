@@ -1,8 +1,8 @@
 import Foundation
 import PDFKit
 
-/// Imports the text layer of a PDF: lines are reflowed into paragraphs, chapters come from the
-/// document outline when it has one, otherwise from heading detection.
+/// Imports the text layer of a PDF: lines are reflowed into paragraphs, placed images are inserted between
+/// them, chapters come from the document outline when it has one, otherwise from heading detection.
 public struct PDFImporter: BookImporter {
     /// Below this many extracted characters per page the PDF is treated as scanned images.
     static let minimumCharactersPerPage = 20
@@ -25,14 +25,16 @@ public struct PDFImporter: BookImporter {
         }
         let located = PDFReflow.locatedParagraphs(from: PDFReflow.removingRunningHeaders(lines))
         guard !located.isEmpty else { throw ImportError.emptyDocument }
+        let images = document.documentRef.map { PDFImageExtractor.images(in: $0) } ?? []
+        let items = PDFImagePlacer.merged(located, images: images)
 
         let chapters: [Chapter]
         let foundHeadings: Bool
         if let outline = Self.outlineMarkers(of: document) {
-            chapters = Self.chapters(from: located, markers: outline)
+            chapters = Self.chapters(from: items, markers: outline)
             foundHeadings = true
         } else {
-            (chapters, foundHeadings) = StructureBuilder.build(located.map { .paragraph($0.paragraph) })
+            (chapters, foundHeadings) = StructureBuilder.build(items.map(\.structuredItem))
         }
         guard !chapters.isEmpty else { throw ImportError.emptyDocument }
 
@@ -115,8 +117,8 @@ public struct PDFImporter: BookImporter {
         return markers.contains { $0.page != nil } ? markers : nil
     }
 
-    /// Splits the paragraph stream at each marker's destination, in reading order.
-    private static func chapters(from located: [PDFReflow.Located], markers: [Marker]) -> [Chapter] {
+    /// Splits the paragraph and image stream at each marker's destination, in reading order.
+    private static func chapters(from items: [PDFFlowItem], markers: [Marker]) -> [Chapter] {
         var starts: [Int] = []
         for marker in markers {
             let previous = starts.last ?? 0
@@ -124,28 +126,27 @@ public struct PDFImporter: BookImporter {
                 starts.append(previous)
                 continue
             }
-            let start = located.firstIndex { item in
-                let line = item.firstLine
-                return line.pageIndex > page
-                    || (line.pageIndex == page && line.bounds.maxY <= marker.y + destinationTolerance)
-            } ?? located.count
+            let start = items.firstIndex { item in
+                item.pageIndex > page || (item.pageIndex == page && item.top <= marker.y + destinationTolerance)
+            } ?? items.count
             starts.append(max(start, previous))
         }
 
         var chapters: [Chapter] = []
         if let first = starts.first, first > 0 {
-            chapters.append(Chapter(blocks: located[0..<first].map { .paragraph($0.paragraph.runs) }))
+            chapters.append(Chapter(blocks: items[0..<first].map(\.block)))
         }
         for (index, marker) in markers.enumerated() {
-            let end = index + 1 < starts.count ? starts[index + 1] : located.count
-            var range = located[starts[index]..<end]
+            let end = index + 1 < starts.count ? starts[index + 1] : items.count
+            var range = items[starts[index]..<end]
             // The heading line that repeats the outline label is already the chapter title.
-            if let first = range.first, normalizedTitle(first.paragraph.text) == normalizedTitle(marker.title) {
+            if case .paragraph(let first) = range.first,
+               normalizedTitle(first.paragraph.text) == normalizedTitle(marker.title) {
                 range = range.dropFirst()
             }
             let chapter = Chapter(
                 title: marker.title.isEmpty ? nil : marker.title,
-                blocks: range.map { .paragraph($0.paragraph.runs) }
+                blocks: range.map(\.block)
             )
             if marker.isInPart, var part = chapters.popLast() {
                 part.children.append(chapter)

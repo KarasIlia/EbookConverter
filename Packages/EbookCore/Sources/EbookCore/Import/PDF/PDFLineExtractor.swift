@@ -18,7 +18,7 @@ public enum PDFLineExtractor {
         // PDFKit selection bounds are in unrotated media-box space; normalise them to the visible page
         // (crop box origin at 0,0, rotation applied) so `bounds` always lies within `pageSize`.
         let crop = page.bounds(for: .cropBox)
-        let rotation = ((page.rotation % 360) + 360) % 360
+        let rotation = normalizedRotation(page.rotation)
         let pageSize = rotation == 90 || rotation == 270
             ? CGSize(width: crop.height, height: crop.width) : crop.size
         let nsString = pageString as NSString
@@ -47,7 +47,7 @@ public enum PDFLineExtractor {
     /// Points outside the crop box (including PDFKit's "unspecified" value) are clamped to its edges.
     static func visiblePoint(_ point: CGPoint, on page: PDFPage) -> CGPoint {
         let crop = page.bounds(for: .cropBox)
-        let rotation = ((page.rotation % 360) + 360) % 360
+        let rotation = normalizedRotation(page.rotation)
         let x = min(max(point.x, crop.minX), crop.maxX) - crop.minX
         let y = min(max(point.y, crop.minY), crop.maxY) - crop.minY
         switch rotation {
@@ -58,8 +58,15 @@ public enum PDFLineExtractor {
         }
     }
 
+    /// A page's `/Rotate` value as 0, 90, 180 or 270.
+    static func normalizedRotation(_ rotation: Int) -> Int {
+        ((rotation % 360) + 360) % 360
+    }
+
     /// Maps a media-box-space rect to the displayed page: clipped to the crop box, shifted to the origin, rotated.
-    private static func visibleBounds(_ rect: CGRect, crop: CGRect, rotation: Int) -> CGRect {
+    /// Shared by text lines and images (`PDFImageExtractor`) so both live in the same coordinate space.
+    /// `rotation` must be normalized (see `normalizedRotation`).
+    static func visibleBounds(_ rect: CGRect, crop: CGRect, rotation: Int) -> CGRect {
         let clipped = rect.intersection(crop)
         guard !clipped.isNull else { return .null }
         let x = clipped.minX - crop.minX, y = clipped.minY - crop.minY

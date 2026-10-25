@@ -28,10 +28,15 @@ public enum PDFReflow {
     private static let closingQuotes: Set<Character> = ["»", "\"", "”"]
     private static let softHyphen: Character = "\u{AD}"
 
-    /// A paragraph with the line it starts on, so callers can locate it on the page.
+    /// A paragraph with its lines in reading order, so callers can locate it on the page.
     struct Located {
         var paragraph: StyledParagraph
-        var firstLine: PDFTextLine
+        /// Never empty.
+        var lines: [PDFTextLine]
+
+        var firstLine: PDFTextLine {
+            lines[0]
+        }
     }
 
     public static func paragraphs(from lines: [PDFTextLine]) -> [StyledParagraph] {
@@ -87,9 +92,10 @@ public enum PDFReflow {
                !breaks(between: lines[index - 1], and: line, previousEdges: edges[index - 1], nextEdges: edges[index], spacing: spacing),
                var current = result.popLast() {
                 current.paragraph.runs = joined(current.paragraph.runs, line.runs)
+                current.lines.append(line)
                 result.append(current)
             } else {
-                result.append(Located(paragraph: StyledParagraph(runs: line.runs, fontSize: line.fontSize), firstLine: line))
+                result.append(Located(paragraph: StyledParagraph(runs: line.runs, fontSize: line.fontSize), lines: [line]))
             }
         }
         return result
