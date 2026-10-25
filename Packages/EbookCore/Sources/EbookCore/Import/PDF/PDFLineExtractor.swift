@@ -43,6 +43,21 @@ public enum PDFLineExtractor {
         return result
     }
 
+    /// Maps a media-box-space point (e.g. an outline destination) to the visible page space used by line bounds.
+    /// Points outside the crop box (including PDFKit's "unspecified" value) are clamped to its edges.
+    static func visiblePoint(_ point: CGPoint, on page: PDFPage) -> CGPoint {
+        let crop = page.bounds(for: .cropBox)
+        let rotation = ((page.rotation % 360) + 360) % 360
+        let x = min(max(point.x, crop.minX), crop.maxX) - crop.minX
+        let y = min(max(point.y, crop.minY), crop.maxY) - crop.minY
+        switch rotation {
+        case 90: return CGPoint(x: y, y: crop.width - x)
+        case 180: return CGPoint(x: crop.width - x, y: crop.height - y)
+        case 270: return CGPoint(x: crop.height - y, y: x)
+        default: return CGPoint(x: x, y: y)
+        }
+    }
+
     /// Maps a media-box-space rect to the displayed page: clipped to the crop box, shifted to the origin, rotated.
     private static func visibleBounds(_ rect: CGRect, crop: CGRect, rotation: Int) -> CGRect {
         let clipped = rect.intersection(crop)
