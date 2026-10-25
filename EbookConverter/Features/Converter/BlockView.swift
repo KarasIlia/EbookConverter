@@ -13,6 +13,7 @@ struct BlockView: View {
                 .font(Self.headingFont(level: level))
                 .bold()
                 .padding(.vertical)
+                .accessibilityAddTraits(.isHeader)
         case .paragraph(let runs):
             Text(Self.attributedText(runs))
                 .textSelection(.enabled)
@@ -24,6 +25,13 @@ struct BlockView: View {
                     // Never upscale beyond the image's own size; the column width caps it otherwise.
                     .frame(maxWidth: CGFloat(asset.pixelWidth))
                     .frame(maxWidth: .infinity)
+                    .accessibilityLabel(Text(.previewImage))
+            } else {
+                Image(systemName: "photo")
+                    .font(.largeTitle)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+                    .accessibilityLabel(Text(.previewImage))
             }
         }
     }

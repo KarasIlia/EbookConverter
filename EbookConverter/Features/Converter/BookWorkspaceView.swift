@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import ConverterFeature
 import EbookCore
 
@@ -18,7 +19,7 @@ struct BookWorkspaceView: View {
                 if let document = viewModel.document,
                    let id = viewModel.selectedChapterID,
                    let chapter = document.chapter(withID: id) {
-                    ChapterPreview(chapter: chapter)
+                    ChapterPreview(chapter: chapter, isRightToLeft: isRightToLeft)
                         // A re-imported book may reuse image IDs for other data; start with a fresh cache.
                         .id(document.identifier)
                 } else {
@@ -46,6 +47,14 @@ struct BookWorkspaceView: View {
             return true
         }
         .frame(minWidth: ConverterLayout.workspaceMinSize.width, minHeight: ConverterLayout.workspaceMinSize.height)
+        .onAppear {
+            WindowGrowth.grow(NSApp.keyWindow ?? NSApp.mainWindow, toContentSize: ConverterLayout.workspaceIdealSize)
+        }
+    }
+
+    /// Direction of the edited language, matching the `dir` the exported EPUB gets.
+    private var isRightToLeft: Bool {
+        BookMetadata(title: "", author: "", language: viewModel.language).isRightToLeft
     }
 
     private func open(_ url: URL) {

@@ -12,6 +12,6 @@ struct EbookConverterApp: App {
                     Task { await viewModel.open(url) }
                 }
         }
-        .windowResizability(.contentSize)
+        .windowResizability(.contentMinSize)
     }
 }

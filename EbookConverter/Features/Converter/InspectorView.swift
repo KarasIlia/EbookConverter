@@ -38,7 +38,7 @@ struct InspectorView: View {
                 TextField(text: $viewModel.author) {
                     Text(.fieldAuthor)
                 }
-                Picker(selection: $viewModel.language) {
+                Picker(selection: languageSelection) {
                     ForEach(LanguageOption.options(bookLanguage: viewModel.document?.metadata.language ?? "")) { option in
                         if let name = option.name {
                             Text(name).tag(option.code)
@@ -104,6 +104,21 @@ struct InspectorView: View {
             }
         }
         .alert(Text(.exportFailed), isPresented: $isExportFailed) {}
+        // The confirmation is about the saved file; any edit makes the next export a different book.
+        .onChange(of: viewModel.title) { savedURL = nil }
+        .onChange(of: viewModel.author) { savedURL = nil }
+        .onChange(of: viewModel.language) { savedURL = nil }
+        .onChange(of: viewModel.outputFormat) { savedURL = nil }
+        .onChange(of: viewModel.cover) { savedURL = nil }
+    }
+
+    /// The edited language, with an empty tag shown as undetermined.
+    private var languageSelection: Binding<String> {
+        Binding {
+            LanguageOption.normalized(viewModel.language)
+        } set: { code in
+            viewModel.language = code
+        }
     }
 
     private func export() {
