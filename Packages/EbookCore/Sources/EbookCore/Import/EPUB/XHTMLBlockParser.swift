@@ -6,6 +6,8 @@ public enum XHTMLBlockParser {
     public struct Content: Sendable, Hashable {
         public var title: [InlineRun]?
         public var blocks: [Block]
+        /// `true` if a parse error cut the document short, so some content may be missing.
+        public var isTruncated = false
     }
 
     /// Blocks of `xhtml` without the leading chapter title heading.
@@ -18,12 +20,12 @@ public enum XHTMLBlockParser {
     public static func parse(_ xhtml: Data, resolveImage: (String) -> ImageAsset?) -> Content {
         withoutActuallyEscaping(resolveImage) { resolve in
             let collector = Collector(resolveImage: resolve)
-            let parser = XMLParser(data: XHTMLEntities.numericReferences(in: xhtml))
+            let parser = XMLParser(data: XHTMLEntities.sanitized(xhtml))
             parser.shouldResolveExternalEntities = false
             parser.delegate = collector
             parser.parse()
             collector.flush()
-            return Content(title: collector.title, blocks: collector.blocks)
+            return Content(title: collector.title, blocks: collector.blocks, isTruncated: collector.hasParseError)
         }
     }
 
@@ -38,6 +40,7 @@ public enum XHTMLBlockParser {
         private let resolveImage: (String) -> ImageAsset?
         private(set) var blocks: [Block] = []
         private(set) var title: [InlineRun]?
+        private(set) var hasParseError = false
 
         private var runs: [InlineRun] = []
         private var headingLevel: Int?
@@ -102,6 +105,10 @@ public enum XHTMLBlockParser {
             let collapsed = Self.collapseWhitespace(string)
             guard !collapsed.isEmpty else { return }
             runs.append(InlineRun(collapsed, bold: boldDepth > 0, italic: italicDepth > 0))
+        }
+
+        func parser(_ parser: XMLParser, parseErrorOccurred parseError: any Error) {
+            hasParseError = true
         }
 
         // MARK: - Building

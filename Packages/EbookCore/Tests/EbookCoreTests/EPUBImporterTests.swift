@@ -202,6 +202,118 @@ import Testing
         await #expect(throws: ImportError.emptyDocument) { try await EPUBImporter().importBook(from: empty, context: ImportContext()) }
     }
 
+    @Test func corruptSpineFileIsReportedAndOthersSurvive() async throws {
+        let url = try Self.epub(
+            manifest: """
+            <item id="a" href="a.xhtml" media-type="application/xhtml+xml"/>
+            <item id="b" href="b.xhtml" media-type="application/xhtml+xml"/>
+            <item id="c" href="c.xhtml" media-type="application/xhtml+xml"/>
+            """,
+            spine: ["a", "b", "c"],
+            files: [
+                "OEBPS/a.xhtml": Self.page("<h1>A</h1><p>Alpha.</p>"),
+                "OEBPS/b.xhtml": Self.page("<h1>B</h1><p>Beta.</p>"),
+                "OEBPS/c.xhtml": Self.page("<h1>C</h1><p>Gamma.</p>"),
+            ]
+        )
+        var bytes = try Data(contentsOf: url)
+        let name = try #require(bytes.range(of: Data("OEBPS/b.xhtml".utf8)))
+        bytes[name.upperBound + 3] ^= 0xFF // inside the entry's payload
+        try bytes.write(to: url)
+
+        let result = try await EPUBImporter().importBook(from: url, context: ImportContext())
+        #expect(result.document.chapters.map(\.title) == ["A", "C"])
+        #expect(result.warnings.contains(.contentPartiallyUnreadable(count: 1)))
+    }
+
+    @Test func sloppyMarkupKeepsWholeChapterWithoutWarning() async throws {
+        let url = try Self.epub(
+            manifest: "<item id=\"a\" href=\"a.xhtml\" media-type=\"text/html\"/>",
+            spine: ["a"],
+            files: ["OEBPS/a.xhtml": "<html><body><h1>T</h1><p>AT&T line<br>two</p><p>after</p></body></html>"]
+        )
+        let result = try await EPUBImporter().importBook(from: url, context: ImportContext())
+        #expect(result.document.chapters.first?.plainText == "AT&T line two\nafter")
+        #expect(!result.warnings.contains { if case .contentPartiallyUnreadable = $0 { true } else { false } })
+    }
+
+    @Test func truncatedMarkupIsReported() async throws {
+        let url = try Self.epub(
+            manifest: "<item id=\"a\" href=\"a.xhtml\" media-type=\"application/xhtml+xml\"/>",
+            spine: ["a"],
+            files: ["OEBPS/a.xhtml": "<html><body><h1>T</h1><p>Kept.</p><p>Broken <b></p></body></html>"]
+        )
+        let result = try await EPUBImporter().importBook(from: url, context: ImportContext())
+        #expect(result.document.chapters.first?.plainText == "Kept.\nBroken")
+        #expect(result.warnings.contains(.contentPartiallyUnreadable(count: 1)))
+    }
+
+    @Test func tocLabelsKeepInlineMarkupInOrder() async throws {
+        let nav = Self.page("""
+        <nav epub:type="toc"><ol>
+          <li><a href="a.xhtml">Chapter <em>One</em>: Start</a></li>
+          <li><a href="b.xhtml">Chap<i>ter</i> Two</a></li>
+        </ol></nav>
+        """)
+        let url = try Self.epub(
+            manifest: """
+            <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+            <item id="a" href="a.xhtml" media-type="application/xhtml+xml"/>
+            <item id="b" href="b.xhtml" media-type="application/xhtml+xml"/>
+            """,
+            spine: ["a", "b"],
+            files: [
+                "OEBPS/nav.xhtml": nav,
+                "OEBPS/a.xhtml": Self.page("<p>One.</p>"),
+                "OEBPS/b.xhtml": Self.page("<p>Two.</p>"),
+            ]
+        )
+        let result = try await EPUBImporter().importBook(from: url, context: ImportContext())
+        #expect(result.document.chapters.map(\.title) == ["Chapter One: Start", "Chapter Two"])
+    }
+
+    @Test func archiveExpandingPastTheBudgetIsRefused() async throws {
+        let url = try Self.write(EPUBWriter().write(FixtureFactory.sampleDocument(), cover: nil))
+        await #expect(throws: ImportError.self) {
+            try await EPUBImporter(totalBudget: 200).importBook(from: url, context: ImportContext())
+        }
+    }
+
+    @Test func firstDeclaredCoverImageWins() async throws {
+        let first = FixtureFactory.pngImage(width: 7, height: 7)
+        let second = FixtureFactory.pngImage(width: 9, height: 9)
+        let url = try Self.epub(
+            manifest: """
+            <item id="c1" href="one.png" media-type="image/png" properties="cover-image"/>
+            <item id="c2" href="two.png" media-type="image/png" properties="cover-image"/>
+            <item id="a" href="a.xhtml" media-type="application/xhtml+xml"/>
+            """,
+            spine: ["a"], files: ["OEBPS/a.xhtml": Self.page("<p>Text.</p>")],
+            binaries: ["OEBPS/one.png": first.data, "OEBPS/two.png": second.data]
+        )
+        let result = try await EPUBImporter().importBook(from: url, context: ImportContext())
+        #expect(result.sourceCover?.pixelWidth == 7)
+    }
+
+    @Test func imageOnlyFirstPageBecomesCoverWhenNoneDeclared() async throws {
+        let picture = FixtureFactory.pngImage(width: 8, height: 8)
+        let url = try Self.epub(
+            manifest: """
+            <item id="p" href="p.xhtml" media-type="application/xhtml+xml"/>
+            <item id="a" href="a.xhtml" media-type="application/xhtml+xml"/>
+            """,
+            spine: ["p", "a"],
+            files: [
+                "OEBPS/p.xhtml": Self.page("<div><img src=\"pic.png\"/></div>"),
+                "OEBPS/a.xhtml": Self.page("<h1>T</h1><p>Text.</p>"),
+            ],
+            binaries: ["OEBPS/pic.png": picture.data]
+        )
+        let result = try await EPUBImporter().importBook(from: url, context: ImportContext())
+        #expect(result.sourceCover?.pixelWidth == 8)
+        #expect(result.document.allImages.isEmpty)
+    }
+
     // MARK: - Fixtures
 
     static func stripInvalidXML(_ text: String) -> String {

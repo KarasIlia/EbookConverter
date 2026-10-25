@@ -5,13 +5,22 @@ public struct EPUBImporter: BookImporter {
     /// Heading level for a chapter's own title when it differs from the table-of-contents label.
     private static let subheadingLevel = 3
 
-    public init() {}
+    private let totalBudget: Int
+
+    public init() {
+        totalBudget = ZipReader.defaultTotalBudget
+    }
+
+    /// Test seam: a smaller limit on the total decompressed size.
+    init(totalBudget: Int) {
+        self.totalBudget = totalBudget
+    }
 
     public func importBook(from url: URL, context: ImportContext) async throws -> ImportResult {
         let data: Data
         do { data = try Data(contentsOf: url) } catch { throw ImportError.unreadable(error.localizedDescription) }
         let fallbackTitle = url.deletingPathExtension().lastPathComponent.replacing("_", with: " ")
-        return try Self.makeResult(from: ZipReader(data: data), fallbackTitle: fallbackTitle)
+        return try Self.makeResult(from: ZipReader(data: data, totalBudget: totalBudget), fallbackTitle: fallbackTitle)
     }
 
     // MARK: - Package
@@ -24,10 +33,16 @@ public struct EPUBImporter: BookImporter {
         let pages = spinePaths(of: package, in: zip)
         var chapters: [Chapter] = []
         var foundHeadings = !claims.isEmpty
+        var damagedFileCount = 0
+        var fallbackCover: ImageAsset?
 
         for (index, path) in pages.enumerated() {
-            guard let data = try? zip.data(for: path) else { continue }
+            guard let data = try? zip.data(for: path) else {
+                damagedFileCount += 1
+                continue
+            }
             let content = XHTMLBlockParser.parse(data) { loader.load($0, from: path) }
+            if content.isTruncated { damagedFileCount += 1 }
 
             let images = content.blocks.compactMap { block -> ImageAsset? in
                 if case .image(let asset) = block { asset } else { nil }
@@ -35,7 +50,14 @@ public struct EPUBImporter: BookImporter {
             let isImageOnly = content.title == nil && !images.isEmpty && images.count == content.blocks.count
             if isImageOnly,
                images.contains(where: { $0.id == package.coverImagePath }) || path == package.guideCoverPath || index == 0 {
-                continue // cover page: the cover is returned separately
+                // Cover page: the cover is returned separately; with none declared, the page's image is the cover.
+                if package.coverImagePath == nil, index == 0, let image = images.first {
+                    fallbackCover = ImageAsset(
+                        id: "cover", data: image.data, contentType: image.contentType,
+                        pixelWidth: image.pixelWidth, pixelHeight: image.pixelHeight
+                    )
+                }
+                continue
             }
 
             var blocks = content.blocks
@@ -64,6 +86,7 @@ public struct EPUBImporter: BookImporter {
             }
         }
 
+        if zip.isBudgetExhausted { throw ImportError.unreadable("Archive expands to too much data") }
         chapters = chapters.compactMap(pruned)
         guard !chapters.isEmpty else { throw ImportError.emptyDocument }
         var imageNumbers: [String: Int] = [:]
@@ -72,6 +95,7 @@ public struct EPUBImporter: BookImporter {
         var warnings: [ImportWarning] = []
         if loader.missingCount > 0 { warnings.append(.imagesUnavailable(count: loader.missingCount)) }
         if loader.remoteCount > 0 { warnings.append(.remoteImagesSkipped(count: loader.remoteCount)) }
+        if damagedFileCount > 0 { warnings.append(.contentPartiallyUnreadable(count: damagedFileCount)) }
 
         var language = package.language.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.flatMap { $0.isEmpty ? nil : $0 }
         if language == nil {
@@ -87,7 +111,8 @@ public struct EPUBImporter: BookImporter {
         )
         let cover = package.coverImagePath
             .flatMap { try? zip.data(for: $0) }
-            .flatMap { ImageNormalizer.normalize($0, id: "cover") }
+            .flatMap { ImageNormalizer.normalize($0, id: "cover") } ?? fallbackCover
+        if zip.isBudgetExhausted { throw ImportError.unreadable("Archive expands to too much data") }
         return ImportResult(
             document: BookDocument(metadata: metadata, chapters: chapters), sourceCover: cover, warnings: warnings
         )
@@ -121,13 +146,13 @@ public struct EPUBImporter: BookImporter {
     private static func tableOfContents(of package: EPUBPackage, in zip: ZipReader) -> [String: (title: String, depth: Int)] {
         let available = Set(zip.paths)
         var entries: [EPUBTableOfContents.Entry] = []
-        if let nav = package.items.values.first(where: { $0.properties.contains("nav") && available.contains($0.path) }),
+        if let nav = package.orderedItems.first(where: { $0.properties.contains("nav") && available.contains($0.path) }),
            let data = try? zip.data(for: nav.path) {
             entries = EPUBTableOfContents.parseNav(data, at: nav.path)
         }
         if entries.isEmpty {
             let ncx = package.tocID.flatMap { package.items[$0] }
-                ?? package.items.values.first { $0.mediaType == "application/x-dtbncx+xml" }
+                ?? package.orderedItems.first { $0.mediaType == "application/x-dtbncx+xml" }
             if let ncx, available.contains(ncx.path), let data = try? zip.data(for: ncx.path) {
                 entries = EPUBTableOfContents.parseNCX(data, at: ncx.path)
             }

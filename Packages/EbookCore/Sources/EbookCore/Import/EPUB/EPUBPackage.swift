@@ -19,6 +19,8 @@ struct EPUBPackage {
     var authors: [String] = []
     var language: String?
     var items: [String: Item] = [:]
+    /// Manifest items in document order (first declaration of an id wins).
+    var orderedItems: [Item] = []
     /// `idref`s of the spine in reading order.
     var spine: [String] = []
     var tocID: String?
@@ -43,16 +45,19 @@ struct EPUBPackage {
                   let href = element.attributes["href"],
                   let itemPath = ArchivePath.resolve(href, relativeTo: path) else { continue }
             let properties = Set((element.attributes["properties"] ?? "").split(separator: " ").map(String.init))
-            package.items[id] = Item(
+            guard package.items[id] == nil else { continue }
+            let item = Item(
                 id: id, path: itemPath, mediaType: element.attributes["media-type"] ?? "", properties: properties
             )
+            package.items[id] = item
+            package.orderedItems.append(item)
         }
 
         let spine = root.firstChild(named: "spine")
         package.spine = (spine?.children(named: "itemref") ?? []).compactMap { $0.attributes["idref"] }
         package.tocID = spine?.attributes["toc"]
 
-        let declaredCover = package.items.values.first { $0.properties.contains("cover-image") }
+        let declaredCover = package.orderedItems.first { $0.properties.contains("cover-image") }
         let metaCover = root.firstChild(named: "metadata")?.children(named: "meta")
             .first { $0.attributes["name"]?.lowercased() == "cover" }
             .flatMap { $0.attributes["content"] }

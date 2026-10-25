@@ -6,22 +6,33 @@ final class XMLTreeNode {
     let name: String
     let attributes: [String: String]
     private(set) var children: [XMLTreeNode] = []
-    private(set) var text = ""
+    /// Text and child elements interleaved in document order.
+    private var content: [Piece] = []
+
+    private enum Piece {
+        case text(String)
+        case element(XMLTreeNode)
+    }
 
     private init(name: String, attributes: [String: String]) {
         self.name = name
         self.attributes = attributes
     }
 
-    /// Text of this element and its descendants, whitespace-collapsed and trimmed.
+    /// Text of this element and its descendants in document order (inline markup adds no separators),
+    /// with whitespace collapsed and trimmed.
     var collapsedText: String {
-        var parts: [String] = []
+        var raw = ""
         func collect(_ node: XMLTreeNode) {
-            parts.append(node.text)
-            node.children.forEach(collect)
+            for piece in node.content {
+                switch piece {
+                case .text(let string): raw += string
+                case .element(let child): collect(child)
+                }
+            }
         }
         collect(self)
-        return parts.joined(separator: " ").split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        return raw.split(whereSeparator: \.isWhitespace).joined(separator: " ")
     }
 
     func firstChild(named name: String) -> XMLTreeNode? {
@@ -48,7 +59,7 @@ final class XMLTreeNode {
     /// Parses `data`; `nil` if the document is not well-formed enough to yield a root.
     static func parse(_ data: Data) -> XMLTreeNode? {
         let builder = Builder()
-        let parser = XMLParser(data: XHTMLEntities.numericReferences(in: data))
+        let parser = XMLParser(data: XHTMLEntities.sanitized(data))
         parser.shouldResolveExternalEntities = false
         parser.delegate = builder
         parser.parse()
@@ -70,7 +81,10 @@ final class XMLTreeNode {
             var attributes: [String: String] = [:]
             for (key, value) in attributeDict { attributes[XMLTreeNode.localName(key)] = value }
             let node = XMLTreeNode(name: XMLTreeNode.localName(elementName), attributes: attributes)
-            if let parent = stack.last { parent.children.append(node) } else if root == nil { root = node }
+            if let parent = stack.last {
+                parent.children.append(node)
+                parent.content.append(.element(node))
+            } else if root == nil { root = node }
             stack.append(node)
         }
 
@@ -81,7 +95,7 @@ final class XMLTreeNode {
         }
 
         func parser(_ parser: XMLParser, foundCharacters string: String) {
-            stack.last?.text += string
+            stack.last?.content.append(.text(string))
         }
     }
 }

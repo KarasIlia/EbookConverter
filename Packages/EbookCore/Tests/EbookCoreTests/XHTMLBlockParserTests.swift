@@ -53,4 +53,23 @@ import Testing
         let content = parse("<p>Kept.</p><p>Broken <b></p>")
         #expect(content.blocks.first == .paragraph([InlineRun("Kept.")]))
     }
+
+    @Test func bareAmpersandKeepsAllContent() {
+        let content = parse("<p>AT&T and Q&A &#233; &#xE9; &alpha;&Omega; &amp; end</p><p>after</p>")
+        #expect(content.blocks == [
+            .paragraph([InlineRun("AT&T and Q&A \u{E9} \u{E9} \u{3B1}\u{3A9} & end")]),
+            .paragraph([InlineRun("after")]),
+        ])
+        #expect(!content.isTruncated)
+    }
+
+    @Test func unclosedVoidElementsDoNotTruncate() {
+        let content = parse("<p>a<br>b<BR></br></p><hr><p>after<img src=\"x.png\"></p>")
+        #expect(content.blocks == [.paragraph([InlineRun("a b")]), .paragraph([InlineRun("after")])])
+        #expect(!content.isTruncated)
+    }
+
+    @Test func parseErrorsAreReported() {
+        #expect(parse("<p>Kept.</p><p>Broken <b></p>").isTruncated)
+    }
 }

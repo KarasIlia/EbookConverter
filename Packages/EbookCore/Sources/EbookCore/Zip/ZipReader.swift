@@ -1,5 +1,6 @@
 import Compression
 import Foundation
+import Synchronization
 
 /// Minimal ZIP reader: end record, central directory, stored and deflated entries.
 ///
@@ -12,6 +13,30 @@ public struct ZipReader: Sendable {
     /// Entries declaring a larger uncompressed size are refused (zip-bomb guard).
     static let maxUncompressedSize = 200 * 1024 * 1024
 
+    /// Total uncompressed bytes a reader hands out over its lifetime (zip-bomb guard).
+    static let defaultTotalBudget = 1024 * 1024 * 1024
+
+    /// Shared running total of declared uncompressed sizes of the entries read so far.
+    private final class Budget: Sendable {
+        let limit: Int
+        private let state = Mutex((used: 0, exhausted: false))
+
+        init(limit: Int) { self.limit = limit }
+
+        var isExhausted: Bool { state.withLock { $0.exhausted } }
+
+        func spend(_ amount: Int) -> Bool {
+            state.withLock { state in
+                guard state.used + amount <= limit else {
+                    state.exhausted = true
+                    return false
+                }
+                state.used += amount
+                return true
+            }
+        }
+    }
+
     private struct Entry: Sendable {
         var method: UInt16
         var flags: UInt16
@@ -23,10 +48,18 @@ public struct ZipReader: Sendable {
 
     private let bytes: Data
     private let entries: [String: Entry]
+    private let budget: Budget
     /// File paths in central-directory order (directories are omitted).
     public let paths: [String]
 
+    /// `true` once a read was refused because the archive would expand past the total budget.
+    public var isBudgetExhausted: Bool { budget.isExhausted }
+
     public init(data: Data) throws {
+        try self.init(data: data, totalBudget: Self.defaultTotalBudget)
+    }
+
+    init(data: Data, totalBudget: Int) throws {
         let bytes = Data(data) // re-based so indices start at 0
         let endOffset = try Self.findEndRecord(in: bytes)
         let entryCount = try Self.le16(bytes, endOffset + 10)
@@ -72,6 +105,7 @@ public struct ZipReader: Sendable {
         }
         self.bytes = bytes
         self.entries = entries
+        self.budget = Budget(limit: totalBudget)
         self.paths = paths
     }
 
@@ -80,6 +114,8 @@ public struct ZipReader: Sendable {
         guard let entry = entries[path] else { throw Self.failure("No such entry: \(path)") }
         guard entry.flags & 1 == 0 else { throw Self.failure("Encrypted entry: \(path)") }
         guard entry.uncompressedSize <= Self.maxUncompressedSize else { throw Self.failure("Entry too large: \(path)") }
+
+        guard budget.spend(entry.uncompressedSize) else { throw Self.failure("Archive expands to too much data") }
 
         let header = entry.localHeaderOffset
         guard try Self.le32(bytes, header) == 0x0403_4B50 else { throw Self.failure("Corrupt local header: \(path)") }

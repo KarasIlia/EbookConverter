@@ -86,4 +86,16 @@ import Testing
         let lyingReader = try ZipReader(data: lying)
         #expect(throws: ImportError.self) { try lyingReader.data(for: "a.txt") }
     }
+
+    @Test func totalDecompressedBudgetIsEnforced() throws {
+        let zip = try ZipWriter.archive([
+            ZipEntry(path: "a", data: Data(repeating: 1, count: 10), method: .stored),
+            ZipEntry(path: "b", data: Data(repeating: 2, count: 10), method: .stored),
+        ])
+        let reader = try ZipReader(data: zip, totalBudget: 15)
+        #expect(try reader.data(for: "a").count == 10)
+        #expect(!reader.isBudgetExhausted)
+        #expect(throws: ImportError.self) { try reader.data(for: "b") }
+        #expect(reader.isBudgetExhausted)
+    }
 }
