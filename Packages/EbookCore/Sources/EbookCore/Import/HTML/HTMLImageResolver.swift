@@ -11,11 +11,12 @@ public enum HTMLImageResolver {
         reference: String,
         relativeTo fileURL: URL,
         accessibleFolder: URL?,
-        id: String = "img-1"
+        id: String
     ) -> ImageLoadOutcome {
         let trimmed = reference.trimmingCharacters(in: .whitespacesAndNewlines)
         let lowered = trimmed.lowercased()
-        if lowered.hasPrefix("http://") || lowered.hasPrefix("https://") { return .remote }
+        // `//host/path` is protocol-relative: a network reference, not a local path.
+        if lowered.hasPrefix("http://") || lowered.hasPrefix("https://") || lowered.hasPrefix("//") { return .remote }
         // Other schemes (data:, mailto:) are neither local files nor fetchable.
         if let scheme = URL(string: trimmed)?.scheme, scheme.lowercased() != "file" { return .missing }
 

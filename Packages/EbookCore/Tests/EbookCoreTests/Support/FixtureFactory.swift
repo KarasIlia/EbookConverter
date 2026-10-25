@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import Foundation
 import ImageIO
@@ -46,5 +47,25 @@ enum FixtureFactory {
             CGImageDestinationFinalize(destination)
         }
         return ImageAsset(id: id, data: data as Data, contentType: .png, pixelWidth: width, pixelHeight: height)
+    }
+
+    /// Writes `attributed` in the given Word/RTF/HTML format to a fresh temporary folder.
+    static func wordFile(_ attributed: NSAttributedString, type: NSAttributedString.DocumentType) throws -> URL {
+        let data = try attributed.data(
+            from: NSRange(location: 0, length: attributed.length),
+            documentAttributes: [.documentType: type]
+        )
+        let fileExtension = switch type {
+        case .officeOpenXML: "docx"
+        case .docFormat: "doc"
+        case .rtf: "rtf"
+        case .html: "html"
+        default: "dat"
+        }
+        let dir = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appending(path: "book.\(fileExtension)")
+        try data.write(to: url)
+        return url
     }
 }
