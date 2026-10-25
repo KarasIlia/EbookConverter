@@ -6,7 +6,8 @@ import Foundation
 /// - A bare `&` that starts no valid reference becomes `&amp;`.
 /// - Unclosed void elements (`<br>`) become self-closing; stray end tags of void elements are dropped.
 ///
-/// Works on raw bytes (all syntax involved is ASCII), so the document's declared encoding is untouched.
+/// Non-UTF-8 documents (UTF-16 by BOM or first bytes, or a legacy `encoding=` declaration) are transcoded to
+/// UTF-8 first and the declaration is removed, so the byte-level rewriting below only ever sees ASCII-compatible text.
 enum XHTMLEntities {
     private static let xmlPredefined: Set<String> = ["amp", "lt", "gt", "quot", "apos"]
 
@@ -64,7 +65,49 @@ enum XHTMLEntities {
 
     /// Full clean-up: void elements first, then character references.
     static func sanitized(_ data: Data) -> Data {
-        numericReferences(in: selfClosingVoidElements(in: data))
+        numericReferences(in: selfClosingVoidElements(in: utf8Document(from: data)))
+    }
+
+    /// `data` as UTF-8 with any `encoding=` declaration removed; unchanged if it is already UTF-8 or undecodable.
+    static func utf8Document(from data: Data) -> Data {
+        let bytes = [UInt8](data.prefix(4))
+        var encoding: String.Encoding?
+        var payload = data
+        if bytes.starts(with: [0xFF, 0xFE]) {
+            encoding = .utf16LittleEndian
+            payload = data.dropFirst(2)
+        } else if bytes.starts(with: [0xFE, 0xFF]) {
+            encoding = .utf16BigEndian
+            payload = data.dropFirst(2)
+        } else if bytes.starts(with: [0x3C, 0x00]) {
+            encoding = .utf16LittleEndian
+        } else if bytes.starts(with: [0x00, 0x3C]) {
+            encoding = .utf16BigEndian
+        } else if !bytes.starts(with: [0xEF, 0xBB, 0xBF]) {
+            encoding = declaredEncoding(in: data)
+        }
+        guard let encoding, let text = String(data: payload, encoding: encoding) else { return data }
+        return Data(removingEncodingDeclaration(from: text).utf8)
+    }
+
+    /// A non-UTF-8 encoding named in the XML declaration, if any.
+    private static func declaredEncoding(in data: Data) -> String.Encoding? {
+        let head = String(decoding: data.prefix(200), as: UTF8.self)
+        guard head.hasPrefix("<?xml"),
+              let match = head.firstMatch(of: /encoding\s*=\s*["']([A-Za-z0-9._:-]+)["']/) else { return nil }
+        let name = String(match.1)
+        let lowered = name.lowercased()
+        if lowered == "utf-8" || lowered == "utf8" || lowered == "us-ascii" { return nil }
+        let cfEncoding = CFStringConvertIANACharSetNameToEncoding(name as CFString)
+        guard cfEncoding != kCFStringEncodingInvalidId else { return nil }
+        return String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(cfEncoding))
+    }
+
+    private static func removingEncodingDeclaration(from text: String) -> String {
+        guard text.hasPrefix("<?xml"), let end = text.range(of: "?>") else { return text }
+        let declaration = text[..<end.lowerBound]
+        let cleaned = declaration.replacing(/\s+encoding\s*=\s*("[^"]*"|'[^']*')/, with: "")
+        return String(cleaned) + text[end.lowerBound...]
     }
 
     /// Returns `data` with every named reference other than the five XML ones replaced by `&#N;`
@@ -88,7 +131,13 @@ enum XHTMLEntities {
                 continue
             }
             let body = String(decoding: bytes[index + 1..<end], as: UTF8.self)
-            if body.hasPrefix("#") || xmlPredefined.contains(body) {
+            if body.hasPrefix("#") {
+                if isValidXMLCharacterReference(body) {
+                    output.append(contentsOf: bytes[index...end])
+                } else {
+                    output.append(contentsOf: Array("&#65533;".utf8))
+                }
+            } else if xmlPredefined.contains(body) {
                 output.append(contentsOf: bytes[index...end])
             } else if let code = table[body] {
                 output.append(contentsOf: Array("&#\(code);".utf8))
@@ -96,6 +145,18 @@ enum XHTMLEntities {
             index = end + 1
         }
         return Data(output)
+    }
+
+    /// Whether `#123` / `#x7B` names a character allowed in XML 1.0.
+    private static func isValidXMLCharacterReference(_ body: String) -> Bool {
+        let digits = body.dropFirst()
+        let value = digits.first == "x" || digits.first == "X"
+            ? Int(digits.dropFirst(), radix: 16) : Int(digits, radix: 10)
+        guard let value else { return false }
+        switch value {
+        case 0x9, 0xA, 0xD, 0x20...0xD7FF, 0xE000...0xFFFD, 0x10000...0x10FFFF: return true
+        default: return false
+        }
     }
 
     /// Index of the `;` ending a well-formed reference that starts with the `&` at `start`, or `nil`.

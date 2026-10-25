@@ -314,6 +314,30 @@ import Testing
         #expect(result.document.allImages.isEmpty)
     }
 
+    @Test func utf16PackageAndContentDocumentsImport() async throws {
+        let container = """
+        <?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles>
+        <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>
+        """
+        let opf = """
+        <?xml version="1.0" encoding="UTF-16"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+        <metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Ц &amp; Wait\u{2026}</dc:title><dc:language>en</dc:language></metadata>
+        <manifest><item id="a" href="a.xhtml" media-type="application/xhtml+xml"/></manifest>
+        <spine><itemref idref="a"/></spine></package>
+        """
+        let page = Self.page("<h1>T</h1><p>Wait\u{2026} \u{426} &amp; AT&T<br>end</p>")
+            .replacing("UTF-8", with: "UTF-16")
+        let zip = try ZipWriter.archive([
+            ZipEntry(path: "META-INF/container.xml", data: Data(container.utf8)),
+            ZipEntry(path: "OEBPS/content.opf", data: try #require(opf.data(using: .utf16LittleEndian)).withBOM(.utf16LittleEndian)),
+            ZipEntry(path: "OEBPS/a.xhtml", data: try #require(page.data(using: .utf16BigEndian)).withBOM(.utf16BigEndian)),
+        ])
+        let result = try await EPUBImporter().importBook(from: Self.write(zip), context: ImportContext())
+        #expect(result.document.metadata.title == "Ц & Wait\u{2026}")
+        #expect(result.document.chapters.first?.plainText == "Wait\u{2026} \u{426} & AT&T end")
+        #expect(!result.warnings.contains { if case .contentPartiallyUnreadable = $0 { true } else { false } })
+    }
+
     // MARK: - Fixtures
 
     static func stripInvalidXML(_ text: String) -> String {
@@ -379,5 +403,11 @@ import Testing
         entries += files.sorted { $0.key < $1.key }.map { ZipEntry(path: $0.key, data: Data($0.value.utf8)) }
         entries += binaries.sorted { $0.key < $1.key }.map { ZipEntry(path: $0.key, data: $0.value, method: .stored) }
         return try write(ZipWriter.archive(entries))
+    }
+}
+
+private extension Data {
+    func withBOM(_ encoding: String.Encoding) -> Data {
+        Data(encoding == .utf16LittleEndian ? [0xFF, 0xFE] : [0xFE, 0xFF]) + self
     }
 }

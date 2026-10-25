@@ -72,4 +72,32 @@ import Testing
     @Test func parseErrorsAreReported() {
         #expect(parse("<p>Kept.</p><p>Broken <b></p>").isTruncated)
     }
+
+    @Test(arguments: [String.Encoding.utf16LittleEndian, .utf16BigEndian])
+    func utf16DocumentsAreTranscodedBeforeSanitizing(encoding: String.Encoding) throws {
+        let xml = "<?xml version=\"1.0\" encoding=\"UTF-16\"?><html><body><p>A &amp; B\u{2026} \u{426} AT&T<br>x</p><p>after</p></body></html>"
+        let body = try #require(xml.data(using: encoding))
+        let bom: [UInt8] = encoding == .utf16LittleEndian ? [0xFF, 0xFE] : [0xFE, 0xFF]
+        for data in [Data(bom) + body, body] { // with and without BOM
+            let content = XHTMLBlockParser.parse(data) { _ in nil }
+            #expect(content.blocks == [
+                .paragraph([InlineRun("A & B\u{2026} \u{426} AT&T x")]), .paragraph([InlineRun("after")]),
+            ])
+            #expect(!content.isTruncated)
+        }
+    }
+
+    @Test func legacyDeclaredEncodingIsHonored() throws {
+        let xml = "<?xml version=\"1.0\" encoding=\"windows-1251\"?><html><body><p>\u{41F}\u{440}\u{438}\u{432}\u{435}\u{442} &amp; ok</p></body></html>"
+        let data = try #require(xml.data(using: .windowsCP1251))
+        let content = XHTMLBlockParser.parse(data) { _ in nil }
+        #expect(content.blocks == [.paragraph([InlineRun("\u{41F}\u{440}\u{438}\u{432}\u{435}\u{442} & ok")])])
+    }
+
+    @Test func invalidNumericReferencesBecomeReplacementCharacter() {
+        let content = parse("<p>a&#0;b&#12;c&#xD800;d&#99999999999;e&#65;</p><p>after</p>")
+        #expect(content.blocks == [
+            .paragraph([InlineRun("a\u{FFFD}b\u{FFFD}c\u{FFFD}d\u{FFFD}eA")]), .paragraph([InlineRun("after")]),
+        ])
+    }
 }
