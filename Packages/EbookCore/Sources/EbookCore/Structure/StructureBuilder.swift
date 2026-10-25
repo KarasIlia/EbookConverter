@@ -79,8 +79,9 @@ public enum StructureBuilder {
            !pattern.needsSupport || hint != nil || isLarger || paragraph.isAllBold {
             return .fixed(tier: hint ?? (pattern.kind == .part ? 1 : 2), fontSize: size)
         }
-        if let last = text.last, terminalPunctuation.contains(last) { return .none }
+        // Explicit markup is authoritative: "## Note:" is a heading despite the colon.
         if let hint { return .fixed(tier: hint, fontSize: size) }
+        if let last = text.last, terminalPunctuation.contains(last) { return .none }
         if let size, isLarger { return .sized(size) }
         if paragraph.isAllBold { return .bold }
         return .none

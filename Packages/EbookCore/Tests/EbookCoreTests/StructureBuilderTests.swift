@@ -222,4 +222,14 @@ import Foundation
         #expect(result.chapters[0].children.map(\.title) == ["Chapter 1"])
         #expect(result.chapters[0].children[0].plainText == body)
     }
+
+    @Test func explicitHeadingHintBypassesTerminalPunctuation() {
+        let chapters = StructureBuilder.build([para("Note:", hint: 2), para(body), para("Next", hint: 2), para(body)]).chapters
+        #expect(chapters.map(\.title) == ["Note:", "Next"])
+    }
+
+    @Test func unhintedLineWithTerminalPunctuationStaysBody() {
+        let result = StructureBuilder.build([para("Note:", bold: true), para(body)])
+        #expect(!result.foundHeadings)
+    }
 }
