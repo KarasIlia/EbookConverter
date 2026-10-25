@@ -9,10 +9,14 @@ final class XMLTreeNode {
     /// Text and child elements interleaved in document order.
     private var content: [Piece] = []
 
-    private enum Piece {
+    /// A piece of mixed content.
+    enum Piece {
         case text(String)
         case element(XMLTreeNode)
     }
+
+    /// Text and child elements in document order.
+    var pieces: [Piece] { content }
 
     private init(name: String, attributes: [String: String]) {
         self.name = name
@@ -58,12 +62,17 @@ final class XMLTreeNode {
 
     /// Parses `data`; `nil` if the document is not well-formed enough to yield a root.
     static func parse(_ data: Data) -> XMLTreeNode? {
+        parseReportingTruncation(data).root
+    }
+
+    /// Like `parse`, also telling whether a parse error cut the document short (the tree keeps what was read).
+    static func parseReportingTruncation(_ data: Data) -> (root: XMLTreeNode?, isTruncated: Bool) {
         let builder = Builder()
         let parser = XMLParser(data: XHTMLEntities.sanitized(data))
         parser.shouldResolveExternalEntities = false
         parser.delegate = builder
         parser.parse()
-        return builder.root
+        return (builder.root, builder.hasParseError)
     }
 
     static func localName(_ qualified: String) -> String {
@@ -72,6 +81,7 @@ final class XMLTreeNode {
 
     private final class Builder: NSObject, XMLParserDelegate {
         var root: XMLTreeNode?
+        private(set) var hasParseError = false
         private var stack: [XMLTreeNode] = []
 
         func parser(
@@ -92,6 +102,10 @@ final class XMLTreeNode {
             _ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?, qualifiedName qName: String?
         ) {
             _ = stack.popLast()
+        }
+
+        func parser(_ parser: XMLParser, parseErrorOccurred parseError: any Error) {
+            hasParseError = true
         }
 
         func parser(_ parser: XMLParser, foundCharacters string: String) {
