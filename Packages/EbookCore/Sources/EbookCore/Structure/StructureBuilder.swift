@@ -71,15 +71,17 @@ public enum StructureBuilder {
         let text = trimmedText(paragraph)
         guard text.count <= maxHeadingLength else { return .none }
         let size = paragraph.fontSize.map(normalized)
-        let pattern = HeadingPatterns.partOrChapter(text)
         let hint = paragraph.headingLevelHint.map { max(1, $0) }
+        let isLarger = if let size, let bodySize { size >= bodySize * headingSizeRatio } else { false }
 
-        if let pattern {
-            return .fixed(tier: hint ?? (pattern == .part ? 1 : 2), fontSize: size)
+        // Weak pattern matches ("Книга упала.") need a second signal to count as headings.
+        if let pattern = HeadingPatterns.match(text),
+           !pattern.needsSupport || hint != nil || isLarger || paragraph.isAllBold {
+            return .fixed(tier: hint ?? (pattern.kind == .part ? 1 : 2), fontSize: size)
         }
         if let last = text.last, terminalPunctuation.contains(last) { return .none }
         if let hint { return .fixed(tier: hint, fontSize: size) }
-        if let size, let bodySize, size >= bodySize * headingSizeRatio { return .sized(size) }
+        if let size, isLarger { return .sized(size) }
         if paragraph.isAllBold { return .bold }
         return .none
     }

@@ -40,41 +40,66 @@ public enum HeadingPatterns {
     private static let foldedStandalone = Set(standaloneChapterWords.map(fold))
 
     /// Classifies a single line as a part or chapter heading, or `nil` if it matches no pattern.
+    ///
+    /// A keyword followed by a word (not a number or roman numeral) that ends in sentence
+    /// punctuation (`Книга упала.`) is not a match here; see `match(_:)`.
     public static func partOrChapter(_ line: String) -> HeadingKind? {
+        guard let result = match(line), !result.needsSupport else { return nil }
+        return result.kind
+    }
+
+    /// Like `partOrChapter`, but also reports weak matches: keyword + word token on a line ending
+    /// in sentence punctuation. Those (`needsSupport == true`) are headings only when another
+    /// signal (markup hint, larger font, bold) confirms them.
+    static func match(_ line: String) -> (kind: HeadingKind, needsSupport: Bool)? {
         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         let folded = fold(trimmed)
+        let endsInSentence = trimmed.last.map(sentenceTerminals.contains) ?? false
 
-        if matchesKeyword(in: folded, keywords: foldedParts) { return .part }
-        if matchesKeyword(in: folded, keywords: foldedChapters) { return .chapter }
-        if matchesCJKChapter(trimmed) || matchesKoreanChapter(trimmed) { return .chapter }
-        if matchesStandalone(folded) { return .chapter }
-        if isBareNumber(trimmed) || isRomanNumeral(trimmed) { return .chapter }
+        if let wordToken = keywordMatch(in: folded, keywords: foldedParts) {
+            return (.part, wordToken && endsInSentence)
+        }
+        if let wordToken = keywordMatch(in: folded, keywords: foldedChapters) {
+            return (.chapter, wordToken && endsInSentence)
+        }
+        if matchesCJKChapter(trimmed) || matchesKoreanChapter(trimmed) { return (.chapter, false) }
+        if matchesStandalone(folded) { return (.chapter, false) }
+        if isBareNumber(trimmed) || isRomanNumeral(trimmed) { return (.chapter, false) }
         return nil
     }
 
     // MARK: - Matching
 
+    /// Case-, diacritic- and width-insensitive form. Turkish dotted/dotless I fold to plain `i`.
     private static func fold(_ string: String) -> String {
-        string.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: nil)
+        string
+            .replacing("İ", with: "i")
+            .replacing("ı", with: "i")
+            .folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: nil)
     }
 
     /// `keyword` + whitespace + one token (digits or letters), then an allowed ending.
-    private static func matchesKeyword(in folded: String, keywords: [String]) -> Bool {
+    /// Returns `nil` if there is no match, otherwise whether the token is a word
+    /// (letters that are not a roman numeral) rather than a number.
+    private static func keywordMatch(in folded: String, keywords: [String]) -> Bool? {
         for keyword in keywords where folded.hasPrefix(keyword) {
             var rest = folded.dropFirst(keyword.count)
             guard let first = rest.first, first.isWhitespace else { continue }
             rest = rest.drop(while: \.isWhitespace)
             let token: Substring
+            let isWord: Bool
             if rest.first.map(isDecimalDigit) == true {
                 token = rest.prefix(while: isDecimalDigit)
+                isWord = false
             } else {
                 token = rest.prefix(while: \.isLetter)
+                isWord = !isRomanNumeral(token.uppercased())
             }
             guard !token.isEmpty else { continue }
-            if isAllowedEnding(rest.dropFirst(token.count)) { return true }
+            if isAllowedEnding(rest.dropFirst(token.count)) { return isWord }
         }
-        return false
+        return nil
     }
 
     /// Allowed text after the heading token: nothing, `.`/`:`, or a subtitle
@@ -105,7 +130,10 @@ public enum HeadingPatterns {
 
     private static let cjkNumerals: Set<Character> = Set("0123456789０１２３４５６７８９一二三四五六七八九十百千零〇两")
     private static let cjkChapterMarks: Set<Character> = ["章", "回", "节", "節"]
-    private static let sentenceTerminals: Set<Character> = [".", "!", "?", "。", "！", "？", "…"]
+    /// Sentence-ending punctuation across scripts (Latin, CJK, Arabic, Urdu, Devanagari, Ethiopic, Armenian).
+    private static let sentenceTerminals: Set<Character> = [
+        ".", "!", "?", "…", "‼", "⁇", "⁈", "⁉", "。", "！", "？", "．", "؟", "۔", "।", "॥", "።", "։",
+    ]
 
     /// `第` + numerals + `章/回/节/節`, optionally followed by a title that is not a sentence.
     private static func matchesCJKChapter(_ line: String) -> Bool {

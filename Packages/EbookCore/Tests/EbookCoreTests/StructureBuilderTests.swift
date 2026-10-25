@@ -166,4 +166,60 @@ import Foundation
         #expect(StyledParagraph(runs: [InlineRun("A", bold: true), InlineRun("b")]).isAllBold == false)
         #expect(StyledParagraph(runs: []).isAllBold == false)
     }
+
+    // MARK: Fix round 1
+
+    @Test(arguments: ["Книга упала.", "Часть меня.", "Book it.", "Del mismo.", "Глава семьи."])
+    func keywordSentencesAreNotHeadings(_ sentence: String) throws {
+        #expect(HeadingPatterns.partOrChapter(sentence) == nil)
+        let items = [
+            para("Глава 1", size: 12), para(body, size: 12), para(sentence, size: 12),
+            para(body, size: 12), para("Глава 2", size: 12), para(body, size: 12),
+        ]
+        let result = StructureBuilder.build(items)
+        try #require(result.chapters.map(\.title) == ["Глава 1", "Глава 2"])
+        #expect(result.chapters.allSatisfy { $0.children.isEmpty })
+        #expect(result.chapters[0].blocks[1] == .paragraph([InlineRun(sentence)]))
+    }
+
+    @Test func wordTokenWithoutPeriodIsPart() {
+        #expect(HeadingPatterns.partOrChapter("Часть первая") == .part)
+        let items = [para("Часть первая"), para("Глава 1"), para(body)]
+        let result = StructureBuilder.build(items)
+        #expect(result.chapters.map(\.title) == ["Часть первая"])
+        #expect(result.chapters[0].children.map(\.title) == ["Глава 1"])
+    }
+
+    @Test func boldWordTokenWithPeriodIsChapter() {
+        #expect(HeadingPatterns.partOrChapter("Глава первая.") == nil)
+        let items = [para("Вступление.", size: 12), para("Глава первая.", size: 12, bold: true), para(body, size: 12)]
+        let result = StructureBuilder.build(items)
+        #expect(result.foundHeadings)
+        #expect(result.chapters.map(\.title) == [nil, "Глава первая."])
+    }
+
+    @Test(arguments: [("KISIM 2", HeadingKind.part), ("Kısım 2", .part), ("BÖLÜM 3", .chapter), ("Bölüm 3", .chapter)])
+    func turkishDotlessIFolds(_ line: String, _ expected: HeadingKind) {
+        #expect(HeadingPatterns.partOrChapter(line) == expected)
+    }
+
+    @Test func sizeEqualToPatternHeadingSharesItsLevel() {
+        let items = [
+            para("Chapter 1", size: 16), para(body, size: 11),
+            para("Interlude", size: 16), para(body, size: 11),
+            para("Chapter 2", size: 16), para(body, size: 11),
+        ]
+        let result = StructureBuilder.build(items)
+        #expect(result.chapters.map(\.title) == ["Chapter 1", "Interlude", "Chapter 2"])
+        #expect(result.chapters.allSatisfy { $0.children.isEmpty })
+    }
+
+    @Test func blocksBeforeFirstChapterOfPartGoToPart() {
+        let items = [para("Part 1"), para("Part epigraph text."), para("Chapter 1"), para(body)]
+        let result = StructureBuilder.build(items)
+        #expect(result.chapters.map(\.title) == ["Part 1"])
+        #expect(result.chapters[0].blocks == [.paragraph([InlineRun("Part epigraph text.")])])
+        #expect(result.chapters[0].children.map(\.title) == ["Chapter 1"])
+        #expect(result.chapters[0].children[0].plainText == body)
+    }
 }
