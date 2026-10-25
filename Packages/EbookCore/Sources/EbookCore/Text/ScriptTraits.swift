@@ -21,6 +21,17 @@ public enum ScriptTraits {
         }
     }
 
+    /// Scripts written without spaces between words: CJK plus Thai, Lao, Khmer and Myanmar.
+    public static func isWrittenWithoutSpaces(_ c: Character) -> Bool {
+        if isCJK(c) { return true }
+        return c.unicodeScalars.contains { scalar in
+            switch scalar.value {
+            case 0x0E00...0x0EFF, 0x1000...0x109F, 0x1780...0x17FF, 0x19E0...0x19FF, 0xA9E0...0xA9FF, 0xAA60...0xAA7F: true
+            default: false
+            }
+        }
+    }
+
     public static func isLowercaseLetter(_ c: Character) -> Bool {
         c.isLetter && c.isLowercase
     }

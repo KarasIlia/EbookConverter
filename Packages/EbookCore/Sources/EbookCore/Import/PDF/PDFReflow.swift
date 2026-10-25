@@ -284,20 +284,7 @@ public enum PDFReflow {
     private static func joined(_ runs: [InlineRun], _ next: [InlineRun]) -> [InlineRun] {
         var result = runs
         guard var last = result.popLast() else { return next }
-        let nextFirst = next.map(\.text).joined().first
-        while last.text.last?.isWhitespace == true { last.text.removeLast() }
-        if let end = last.text.last {
-            if end == softHyphen {
-                last.text.removeLast()
-            } else if end == "-", last.text.dropLast().last.map({ !$0.isWhitespace }) ?? false {
-                // A word broken at a hyphen: drop it before a lowercase continuation, keep it in compounds.
-                if let nextFirst, ScriptTraits.isLowercaseLetter(nextFirst) { last.text.removeLast() }
-            } else if let nextFirst, ScriptTraits.isCJK(end), ScriptTraits.isCJK(nextFirst) {
-                // Scripts without word spaces join directly.
-            } else {
-                last.text += " "
-            }
-        }
+        LineJoiner.prepare(&last.text, before: next.map(\.text).joined().first)
         result.append(last)
         for run in next {
             if var tail = result.last, tail.isBold == run.isBold, tail.isItalic == run.isItalic {
