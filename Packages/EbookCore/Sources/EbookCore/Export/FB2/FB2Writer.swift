@@ -53,11 +53,13 @@ public struct FB2Writer: BookWriter {
 
     // MARK: - Metadata
 
+    /// One `author` (the schema requires it): first/middle/last name for several words, a nickname for one word,
+    /// and an empty nickname — no language-specific placeholder — when the author is unknown.
     private static func authorMarkup(_ author: String) -> String {
         let words = author.split(whereSeparator: \.isWhitespace).map(String.init)
         switch words.count {
         case 0:
-            return "<author><nickname>Unknown</nickname></author>"
+            return "<author><nickname/></author>"
         case 1:
             return "<author><nickname>\(XMLEscaping.escape(words[0]))</nickname></author>"
         default:

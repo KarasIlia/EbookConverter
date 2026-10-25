@@ -46,7 +46,16 @@ struct FB2WriterTests {
         #expect(try strings(doc, "\(titleInfo)/*[local-name()='author']/*[local-name()='nickname']") == ["Editor"])
 
         doc = try xml(document(author: "  "))
-        #expect(try strings(doc, "\(titleInfo)/*[local-name()='author']/*[local-name()='nickname']") == ["Unknown"])
+        #expect(try strings(doc, "\(titleInfo)/*[local-name()='author']/*[local-name()='nickname']") == [""])
+    }
+
+    @Test func emptyAuthorIsAnEmptyNickname() throws {
+        let data = try FB2Writer(date: date).write(document(author: ""), cover: nil)
+        let text = String(decoding: data, as: UTF8.self)
+        #expect(text.contains("<title-info>\n<genre>prose</genre>\n<author><nickname/></author>"))
+        #expect(!text.contains("Unknown"))
+        let doc = try XMLDocument(data: data, options: [])
+        #expect(try doc.nodes(forXPath: "\(titleInfo)/*[local-name()='author']").count == 1)
     }
 
     @Test func blankTitleAndLanguageGetFallbacks() throws {
