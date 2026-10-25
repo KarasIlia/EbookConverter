@@ -74,17 +74,20 @@ import Foundation
     }
 
     @Test func boldBodySizeLinesBecomeSubheadingsWhenLargerTierExists() {
-        var items = [para("Vocabulary Builder", size: 50)]
-        for index in 1...30 {
-            items.append(para("headword\(index)", size: 10, bold: true))
-            items.append(para(body, size: 10))
+        // Two large unit headings form a real chapter tier (a single one would be read as the book title).
+        var items: [StructuredItem] = []
+        for unit in ["Vocabulary Builder", "Grammar Builder"] {
+            items.append(para(unit, size: 50))
+            for index in 1...15 {
+                items.append(para("headword\(index)", size: 10, bold: true))
+                items.append(para(body, size: 10))
+            }
         }
         let result = StructureBuilder.build(items)
         #expect(result.foundHeadings)
-        #expect(result.chapters.count == 1)
-        #expect(result.chapters.first?.title == "Vocabulary Builder")
-        if let chapter = result.chapters.first {
-            #expect(headingCount(in: chapter, level: 3) == 30)
+        #expect(result.chapters.map(\.title) == ["Vocabulary Builder", "Grammar Builder"])
+        for chapter in result.chapters {
+            #expect(headingCount(in: chapter, level: 3) == 15)
             #expect(chapter.blocks.first == .heading(level: 3, runs: [InlineRun("headword1", bold: true)]))
         }
     }
@@ -231,5 +234,34 @@ import Foundation
     @Test func unhintedLineWithTerminalPunctuationStaysBody() {
         let result = StructureBuilder.build([para("Note:", bold: true), para(body)])
         #expect(!result.foundHeadings)
+    }
+
+    // MARK: Task 8 fix round 1
+
+    @Test func singleLargeFirstHeadingIsBookTitleAndBoldLinesAreChaptersUnderParts() throws {
+        // Shape of the user's Word sample «Мартин Иден».
+        let items = [
+            para("Джек Лондон – Мартин Иден", size: 14, bold: true), para(body, size: 12),
+            para("ПОСВЯЩЕНИЕ", size: 12, bold: true), para(body, size: 12),
+            para("Предисловие к русскому изданию", size: 12, bold: true), para(body, size: 12),
+            para("ЧАСТЬ 1", size: 12), para("1. Один день из жизни", size: 12, bold: true), para(body, size: 12),
+            para("2. Что такое барьеры", size: 12, bold: true), para(body, size: 12),
+            para("ЧАСТЬ 2", size: 12), para("3. Конфликты", size: 12, bold: true), para(body, size: 12),
+        ]
+        let result = StructureBuilder.build(items)
+        #expect(result.foundHeadings)
+        try #require(result.chapters.map(\.title) == [nil, "ПОСВЯЩЕНИЕ", "Предисловие к русскому изданию", "ЧАСТЬ 1", "ЧАСТЬ 2"])
+        #expect(result.chapters[0].blocks.first == .heading(level: 1, runs: [InlineRun("Джек Лондон – Мартин Иден", bold: true)]))
+        #expect(result.chapters[3].children.map(\.title) == ["1. Один день из жизни", "2. Что такое барьеры"])
+        #expect(result.chapters[4].children.map(\.title) == ["3. Конфликты"])
+    }
+
+    @Test func largeHeadingAfterOtherCandidatesStillFormsTier() {
+        let items = [
+            para("Intro", size: 12, bold: true), para(body, size: 12),
+            para("Big Title", size: 20), para(body, size: 12),
+        ]
+        let result = StructureBuilder.build(items)
+        #expect(result.chapters.contains { $0.title == "Big Title" })
     }
 }

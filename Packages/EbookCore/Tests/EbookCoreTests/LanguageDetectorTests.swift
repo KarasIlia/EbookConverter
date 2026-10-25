@@ -26,4 +26,11 @@ import Testing
         }
         #expect(!ScriptTraits.isSentenceTerminal(","))
     }
+
+    @Test func misleadingFirstParagraphDoesNotDecide() {
+        // NLLanguageRecognizer reads the name line alone as Kazakh.
+        let paragraphs = ["Джек Лондон – Мартин Иден"]
+            + Array(repeating: "Вы не в состоянии управлять своей жизнью? Люди используют вас? Вам сложно произнести слово нет?", count: 20)
+        #expect(LanguageDetector.language(of: paragraphs.joined(separator: "\n")) == "ru")
+    }
 }

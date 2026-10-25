@@ -62,4 +62,11 @@ import Testing
         #expect(metadata.title == nil)
         #expect(RTFInfoDecoder.metadata(fromRTF: Data("not rtf".utf8)) == (nil, nil))
     }
+
+    @Test func typographicControlWordsMapToCharacters() {
+        let header = #"{\rtf1\ansi\ansicpg1252{\fonttbl\f0\fnil A;}"#
+        let info = Data(#"{\title A\endash B\emdash C \lquote q\rquote  \ldblquote dq\rdblquote \bullet\tab x\~y}"#.utf8)
+        let metadata = RTFInfoDecoder.metadata(fromRTF: rtf(header, info: info))
+        #expect(metadata.title == "A–B—C ‘q’ “dq”• x\u{00A0}y")
+    }
 }

@@ -19,7 +19,7 @@ public struct AttributedTextImporter: BookImporter {
         if !isRTF, Self.looksLikeHTML(data, url: url) {
             loaded = try await importHTML(data, url: url, context: context)
         } else {
-            loaded = try await MainActor.run { try Self.load(url: url) }
+            loaded = try await MainActor.run { try Self.load(url: url, isRTF: isRTF) }
         }
 
         var items = loaded.items
@@ -66,11 +66,13 @@ public struct AttributedTextImporter: BookImporter {
     }
 
     @MainActor
-    private static func load(url: URL) throws -> Loaded {
+    private static func load(url: URL, isRTF: Bool) throws -> Loaded {
         var attributes: NSDictionary?
         let string: NSAttributedString
+        // RTF is forced so an RTF named `.doc` is never handed to the Word reader.
+        let options: [NSAttributedString.DocumentReadingOptionKey: Any] = isRTF ? [.documentType: NSAttributedString.DocumentType.rtf] : [:]
         do {
-            string = try NSAttributedString(url: url, options: [:], documentAttributes: &attributes)
+            string = try NSAttributedString(url: url, options: options, documentAttributes: &attributes)
         } catch {
             throw ImportError.unreadable(error.localizedDescription)
         }
@@ -97,7 +99,7 @@ public struct AttributedTextImporter: BookImporter {
 
     private func importHTML(_ data: Data, url: URL, context: ImportContext) async throws -> Loaded {
         guard let source = Self.decodeHTML(data) else { throw ImportError.unreadable("Unrecognized text encoding") }
-        let (html, references) = HTMLImageReferences.neutralize(source)
+        let (html, references) = HTMLSubresourceNeutralizer.neutralize(source)
         let outcomes = references.enumerated().map { index, reference in
             HTMLImageResolver.loadLocalImage(
                 reference: reference, relativeTo: url, accessibleFolder: context.accessibleFolder, id: "img-\(index + 1)"
@@ -133,6 +135,7 @@ public struct AttributedTextImporter: BookImporter {
         }
 
         var loaded = parsed
+        if Self.nonEmpty(loaded.title) == nil { loaded.title = Self.titleElement(in: source) }
         var needsFolderAccess = false
         var remote = 0
         var missing = max(placed - outcomes.count, 0)
@@ -167,6 +170,14 @@ public struct AttributedTextImporter: BookImporter {
             }
         }
         return TextEncodingDetector.decode(data)
+    }
+
+    /// Text of the page's `<title>`, entity-decoded with whitespace collapsed; WebKit does not report it.
+    private static func titleElement(in html: String) -> String? {
+        guard let match = html.firstMatch(of: /(?is)<title\b[^>]*>(.*?)<\/title\s*>/) else { return nil }
+        let text = HTMLSubresourceNeutralizer.decodeEntities(String(match.output.1))
+            .split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        return text.isEmpty ? nil : text
     }
 
     private static func nonEmpty(_ value: String?) -> String? {

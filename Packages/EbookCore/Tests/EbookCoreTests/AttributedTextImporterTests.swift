@@ -225,4 +225,49 @@ import Testing
             _ = try await importBook(url)
         }
     }
+
+    // MARK: Fix round 1
+
+    @Test func htmlTitleTakenFromTitleElement() async throws {
+        let html = "<html><head><title>\n Тест &amp; книга &#8212; один </title></head><body><h2>A</h2><p>\(Self.body)</p></body></html>"
+        let url = try folder().appending(path: "book.html")
+        try Data(html.utf8).write(to: url)
+        let result = try await importBook(url)
+        #expect(result.document.metadata.title == "Тест & книга — один")
+    }
+
+    @Test func htmlImagesInCommentsScriptsAndTemplatesIgnored() async throws {
+        let dir = try folder()
+        try FixtureFactory.pngImage(width: 20, height: 10).data.write(to: dir.appending(path: "a.png"))
+        try FixtureFactory.pngImage(width: 10, height: 30).data.write(to: dir.appending(path: "b.png"))
+        let html = """
+        <html><body><h2>A</h2><p>\(Self.body)</p>
+        <!-- <img src="old.png"> -->
+        <script>var s = '<img src="x.png">';</script>
+        <noscript><img src="y.png"></noscript>
+        <template><img src="z.png"></template>
+        <img src="a.png"><p>text</p><img src="b.png">
+        </body></html>
+        """
+        let url = dir.appending(path: "book.html")
+        try Data(html.utf8).write(to: url)
+        let result = try await importBook(url, context: ImportContext(accessibleFolder: dir))
+        #expect(result.document.allImages.map(\.pixelHeight) == [10, 30])
+        #expect(!result.warnings.contains { if case .imagesUnavailable = $0 { true } else { false } })
+    }
+
+    @Test func htmlSubresourcesNeutralized() {
+        let html = """
+        <html><head><link rel="stylesheet" href="http://e.example/s.css"><link rel=icon href=//e.example/i.png>
+        <style>@import url("http://e.example/x.css"); body { background: url(http://e.example/c.png) }</style></head>
+        <body><img src="a.png" srcset="http://e.example/a2.png 2x, a3.png 3x">
+        <div style="background-image:url('http://e.example/b.png')">x</div>
+        <iframe src="http://e.example/f"></iframe><video poster="http://e.example/p.png"></video>
+        </body></html>
+        """
+        let (output, references) = HTMLSubresourceNeutralizer.neutralize(html)
+        #expect(references == ["a.png"])
+        #expect(!output.contains("e.example"))
+        #expect(!output.contains("a3.png"))
+    }
 }

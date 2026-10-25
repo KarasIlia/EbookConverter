@@ -14,6 +14,12 @@ enum RTFInfoDecoder {
         186: 1257, 222: 874, 128: 932, 134: 936, 129: 949, 136: 950,
     ]
 
+    /// Control words that stand for a character.
+    private static let symbolWords: [String: String] = [
+        "endash": "–", "emdash": "—", "lquote": "‘", "rquote": "’",
+        "ldblquote": "“", "rdblquote": "”", "bullet": "•", "tab": " ",
+    ]
+
     static func metadata(fromRTF data: Data) -> (title: String?, author: String?) {
         let bytes = [UInt8](data)
         guard bytes.starts(with: Array(#"{\rtf"#.utf8)) else { return (nil, nil) }
@@ -137,6 +143,14 @@ enum RTFInfoDecoder {
                 skip = fallbackLength
             case .controlWord("uc", let parameter?):
                 fallbackLength = max(parameter, 0)
+            case .controlWord(let name, _) where symbolWords[name] != nil:
+                flushBytes()
+                flushUnits()
+                result += symbolWords[name] ?? ""
+            case .controlSymbol(UInt8(ascii: "~")):
+                flushBytes()
+                flushUnits()
+                result += "\u{00A0}"
             default:
                 break
             }
