@@ -112,25 +112,53 @@ import EbookCore
     @Test func generatedCoverFollowsTitle() async {
         let (model, _, generator) = makeModel()
         await model.open(bookURL)
+        await model.waitForSizeComputation()
+        let initialRequests = generator.requests.count
 
+        model.title = "N"
+        model.title = "Ne"
         model.title = "New Title"
+        #expect(generator.requests.count == initialRequests)
+        await model.waitForSizeComputation()
+        #expect(generator.requests.count == initialRequests + 1)
         #expect(generator.requests.last?.title == "New Title")
         #expect(model.cover?.data == Data("New Title".utf8))
 
         model.author = "Someone"
+        await model.waitForSizeComputation()
         #expect(generator.requests.last?.title == "New Title")
         #expect(generator.requests.last?.author == "Someone")
 
         model.setCustomCover(TestImages.png(width: 8, height: 8))
+        await model.waitForSizeComputation()
         let count = generator.requests.count
         model.title = "Ignored"
+        await model.waitForSizeComputation()
         #expect(generator.requests.count == count)
+    }
+
+    @Test func measuredCoverMatchesRegeneratedCover() async {
+        let (model, converter, _) = makeModel()
+        await model.open(bookURL)
+        model.title = "Measured"
+        await model.waitForSizeComputation()
+        #expect(converter.recorded.writtenCovers.last??.data == Data("Measured".utf8))
+    }
+
+    @Test func exportFlushesPendingCoverRegeneration() async throws {
+        let (model, converter, _) = makeModel()
+        await model.open(bookURL)
+        model.title = "Exported"
+        _ = try model.exportData()
+        #expect(converter.recorded.writtenCovers.last??.data == Data("Exported".utf8))
+        #expect(model.cover?.data == Data("Exported".utf8))
     }
 
     @Test func fileCoverDoesNotRegenerateOnTitleChange() async {
         let (model, _, generator) = makeModel(cover: sourceCover)
         await model.open(bookURL)
         model.title = "Other"
+        await model.waitForSizeComputation()
         #expect(generator.requests.isEmpty)
         #expect(model.cover == sourceCover)
     }
@@ -144,10 +172,65 @@ import EbookCore
 
         model.outputFormat = .fb2
         #expect(model.bookSize == nil)
+        #expect(model.sizeStatus == .computing)
         await model.waitForSizeComputation()
+        #expect(model.sizeStatus == .ready(FakeConverter.fb2Size))
         #expect(model.bookSize == FakeConverter.fb2Size)
         #expect(converter.recorded.writtenFormats.last == .fb2)
         #expect(converter.recorded.writtenCovers.last == sourceCover)
+    }
+
+    @Test func failedWriteReportsFailedSize() async {
+        let (model, converter, _) = makeModel(cover: sourceCover)
+        converter.setFailsWrites(true)
+        await model.open(bookURL)
+        await model.waitForSizeComputation()
+        #expect(model.sizeStatus == .failed)
+        #expect(model.bookSize == nil)
+
+        converter.setFailsWrites(false)
+        model.title = "Retry"
+        await model.waitForSizeComputation()
+        #expect(model.sizeStatus == .ready(FakeConverter.epubSize))
+    }
+
+    @Test func supersededSlowWriteNeverLandsAndWritesAreSerialized() async {
+        let converter = GatedConverter(gatesWrites: true)
+        let model = ConverterViewModel(makeConverter: { _ in converter }, coverGenerator: FakeCoverGenerator())
+        await model.open(URL(filePath: "/tmp/Slow.txt"))
+        await waitUntil { converter.writeState.started == 1 }
+        #expect(converter.writeState.started == 1)
+
+        model.title = "Changed"
+        try? await Task.sleep(for: .milliseconds(500))
+        #expect(converter.writeState.started == 1, "a new write must wait for the superseded one")
+
+        converter.releaseNextWrite()
+        await waitUntil { converter.writeState.started == 2 }
+        #expect(converter.writeState.started == 2)
+        #expect(model.sizeStatus == .computing, "the superseded write's size must not land")
+
+        converter.releaseNextWrite()
+        await model.waitForSizeComputation()
+        #expect(model.sizeStatus == .ready(1001))
+        #expect(converter.writeState.maxInFlight == 1)
+    }
+
+    @Test func secondOpenWinsOverSlowFirstImport() async {
+        let slowURL = URL(filePath: "/tmp/Slow.txt")
+        let fastURL = URL(filePath: "/tmp/Fast.txt")
+        let converter = GatedConverter(slowURL: slowURL)
+        let model = ConverterViewModel(makeConverter: { _ in converter }, coverGenerator: FakeCoverGenerator())
+
+        let first = Task { await model.open(slowURL) }
+        await waitUntil { converter.startedImports.contains(slowURL) }
+        await model.open(fastURL)
+        #expect(model.title == "Fast")
+
+        converter.releaseSlowImport()
+        await first.value
+        #expect(model.title == "Fast")
+        #expect(model.state == .loaded)
     }
 
     @Test func rapidEditsAreDebouncedIntoOneWrite() async {
@@ -204,6 +287,25 @@ import EbookCore
         #expect(converter.recorded.contexts.last?.accessibleFolder == folder)
         #expect(model.state == .loaded)
         #expect(model.title == "Kept edit")
+    }
+
+    @Test func failedGrantFolderAccessKeepsBook() async {
+        let (model, converter, _) = makeModel()
+        await model.open(bookURL)
+        model.title = "Kept edit"
+        let document = model.document
+        #expect(model.lastError == nil)
+
+        converter.setFailsImports(true)
+        await model.grantFolderAccess(URL(filePath: "/tmp", directoryHint: .isDirectory))
+        #expect(model.state == .loaded)
+        #expect(model.document == document)
+        #expect(model.title == "Kept edit")
+        #expect(model.lastError == .unreadable(CocoaError(.fileReadUnknown).localizedDescription))
+
+        converter.setFailsImports(false)
+        await model.grantFolderAccess(URL(filePath: "/tmp", directoryHint: .isDirectory))
+        #expect(model.lastError == nil)
     }
 
     @Test func factoryReceivesOpenTime() async {

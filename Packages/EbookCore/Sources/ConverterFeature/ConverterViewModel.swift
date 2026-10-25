@@ -34,8 +34,9 @@ import EbookCore
     }
 
     public private(set) var coverSource: CoverSource = .generated
-    /// Exact size in bytes of the output file; `nil` while it is being computed.
-    public private(set) var bookSize: Int?
+    public private(set) var sizeStatus: BookSizeStatus = .computing
+    /// Error of the last failed re-import (`grantFolderAccess`); the loaded book is kept in that case.
+    public private(set) var lastError: ImportError?
     public var selectedChapterID: Chapter.ID?
 
     @ObservationIgnored private let makeConverter: @Sendable (Date) -> any BookConverting
@@ -51,6 +52,8 @@ import EbookCore
     @ObservationIgnored private var importGeneration = 0
     /// Suppresses cover regeneration and size computation while a batch of properties is assigned.
     @ObservationIgnored private var isApplyingChanges = false
+    /// Title/author changed while the cover is generated; it is re-rendered after the debounce, not per keystroke.
+    @ObservationIgnored private var needsCoverRegeneration = false
 
     /// - Parameters:
     ///   - makeConverter: Creates the converter for each opened book from the open time.
@@ -64,6 +67,11 @@ import EbookCore
         self.makeConverter = makeConverter
         self.coverGenerator = coverGenerator
         self.now = now
+    }
+
+    /// Exact size in bytes of the output file; `nil` while computing or after a failed write.
+    public var bookSize: Int? {
+        if case .ready(let size) = sizeStatus { size } else { nil }
     }
 
     /// Title made safe for a file name, plus the output format's extension.
@@ -94,7 +102,8 @@ import EbookCore
     }
 
     /// Re-imports the current file with access to `folder`, so images referenced by relative path resolve.
-    /// Metadata edits and a custom cover are kept.
+    /// Metadata edits and a custom cover are kept. If the re-import fails, the current book stays loaded
+    /// and the error is reported in `lastError`.
     public func grantFolderAccess(_ folder: URL) async {
         guard let fileURL, let converter else { return }
         importGeneration += 1
@@ -105,10 +114,10 @@ import EbookCore
         guard generation == importGeneration else { return }
         switch outcome {
         case .success(let result):
+            lastError = nil
             apply(result, keepingEdits: true)
         case .failure(let error):
-            clearBook()
-            state = .failed(error)
+            lastError = error
         }
     }
 
@@ -128,6 +137,7 @@ import EbookCore
     /// The output file: the document with edited metadata and the current cover, in `outputFormat`.
     /// Produces exactly `bookSize` bytes.
     public func exportData() throws -> Data {
+        regeneratePendingCover()
         guard let converter, let document = editedDocument() else { throw ExportError.noDocument }
         return try converter.write(document, cover: cover, as: outputFormat)
     }
@@ -139,7 +149,8 @@ import EbookCore
 
     // MARK: - Private
 
-    private static func importBook(
+    /// Runs the import off the main actor (importers that need it hop back themselves).
+    @concurrent private static func importBook(
         from url: URL, context: ImportContext, using converter: any BookConverting, accessing scopedURLs: [URL]
     ) async -> Result<ImportResult, ImportError> {
         let accessed = scopedURLs.filter { $0.startAccessingSecurityScopedResource() }
@@ -153,11 +164,11 @@ import EbookCore
         }
     }
 
-    /// Builds the output off the main actor and returns its size, or `nil` if writing failed.
+    /// Builds the output off the main actor and returns its size.
     @concurrent private static func measure(
         _ document: BookDocument, cover: ImageAsset?, format: OutputFormat, using converter: any BookConverting
-    ) async -> Int? {
-        try? converter.write(document, cover: cover, as: format).count
+    ) async -> Result<Int, any Error> {
+        Result { try converter.write(document, cover: cover, as: format).count }
     }
 
     private func apply(_ result: ImportResult, keepingEdits: Bool) {
@@ -173,14 +184,15 @@ import EbookCore
         selectedChapterID = result.document.leafChapters.first?.id
         isApplyingChanges = false
         state = .loaded
-        refreshCover()
-        scheduleSizeComputation()
+        refreshCover()  // assigning `cover` schedules the size computation
     }
 
     private func clearBook() {
+        // Keep the cancelled task referenced so the next one waits for its write to finish.
         sizeTask?.cancel()
-        sizeTask = nil
         isApplyingChanges = true
+        needsCoverRegeneration = false
+        lastError = nil
         converter = nil
         fileURL = nil
         document = nil
@@ -193,12 +205,14 @@ import EbookCore
         author = ""
         language = ""
         selectedChapterID = nil
-        bookSize = nil
+        sizeStatus = .computing
         isApplyingChanges = false
     }
 
     /// Applies the cover precedence custom > fromFile > generated.
     private func refreshCover() {
+        guard document != nil else { return }
+        needsCoverRegeneration = false
         if let customCover {
             coverSource = .custom
             cover = customCover
@@ -214,9 +228,19 @@ import EbookCore
     private func nameDidChange() {
         guard !isApplyingChanges, document != nil else { return }
         if coverSource == .generated {
-            refreshCover()
+            needsCoverRegeneration = true
         }
         scheduleSizeComputation()
+    }
+
+    /// Re-renders a generated cover whose title/author changed, without scheduling another size computation.
+    private func regeneratePendingCover() {
+        guard needsCoverRegeneration else { return }
+        needsCoverRegeneration = false
+        guard coverSource == .generated, document != nil else { return }
+        isApplyingChanges = true
+        cover = coverGenerator.makeCover(title: title, author: author)
+        isApplyingChanges = false
     }
 
     private func editedDocument() -> BookDocument? {
@@ -226,19 +250,27 @@ import EbookCore
     }
 
     /// Cancels the pending measurement and starts a debounced one for the current state.
+    ///
+    /// The new task first waits for the cancelled one to finish, so at most one write runs at a time.
+    /// After the debounce it re-renders a pending generated cover and measures the current state.
     private func scheduleSizeComputation() {
         guard !isApplyingChanges else { return }
-        sizeTask?.cancel()
-        sizeTask = nil
-        bookSize = nil
-        guard let converter, let document = editedDocument() else { return }
-        let cover = cover
-        let format = outputFormat
+        let previous = sizeTask
+        previous?.cancel()
+        sizeStatus = .computing
+        guard converter != nil, document != nil else { return }
         sizeTask = Task { [weak self] in
+            await previous?.value
             do { try await Task.sleep(for: Self.sizeDebounce) } catch { return }
-            let size = await Self.measure(document, cover: cover, format: format, using: converter)
+            guard let self else { return }
+            regeneratePendingCover()
+            guard let converter, let document = editedDocument() else { return }
+            let result = await Self.measure(document, cover: cover, format: outputFormat, using: converter)
             guard !Task.isCancelled else { return }
-            self?.bookSize = size
+            sizeStatus = switch result {
+            case .success(let size): .ready(size)
+            case .failure: .failed
+            }
         }
     }
 }

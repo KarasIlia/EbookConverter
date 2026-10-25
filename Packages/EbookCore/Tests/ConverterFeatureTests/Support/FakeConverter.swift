@@ -18,6 +18,8 @@ final class FakeConverter: BookConverting {
 
     private let result: Result<ImportResult, any Error>
     private let calls = Mutex(Calls())
+    private let failsWrites = Mutex(false)
+    private let failsImports = Mutex(false)
 
     init(result: Result<ImportResult, any Error>) {
         self.result = result
@@ -25,11 +27,22 @@ final class FakeConverter: BookConverting {
 
     var recorded: Calls { calls.withLock { $0 } }
 
+    /// When `true`, `importBook` throws a non-`ImportError`.
+    func setFailsImports(_ fails: Bool) {
+        failsImports.withLock { $0 = fails }
+    }
+
+    /// When `true`, `write` throws.
+    func setFailsWrites(_ fails: Bool) {
+        failsWrites.withLock { $0 = fails }
+    }
+
     func importBook(from url: URL, context: ImportContext) async throws -> ImportResult {
         calls.withLock {
             $0.importedURLs.append(url)
             $0.contexts.append(context)
         }
+        if failsImports.withLock({ $0 }) { throw CocoaError(.fileReadUnknown) }
         return try result.get()
     }
 
@@ -39,6 +52,7 @@ final class FakeConverter: BookConverting {
             $0.writtenDocuments.append(document)
             $0.writtenCovers.append(cover)
         }
+        if failsWrites.withLock({ $0 }) { throw CocoaError(.fileWriteUnknown) }
         return Data(repeating: 0, count: format == .epub ? Self.epubSize : Self.fb2Size)
     }
 }
