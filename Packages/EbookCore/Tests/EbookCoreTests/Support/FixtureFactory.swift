@@ -1,4 +1,5 @@
 import AppKit
+import CoreText
 import CoreGraphics
 import Foundation
 import ImageIO
@@ -66,6 +67,39 @@ enum FixtureFactory {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let url = dir.appending(path: "book.\(fileExtension)")
         try data.write(to: url)
+        return url
+    }
+
+    /// A4 (595x842) PDF with Core Text lines (Helvetica / Helvetica-Bold) and optional images, in a fresh temporary folder.
+    static func pdf(pages: [[FixtureTextBox]], images: [FixtureImageBox] = []) throws -> URL {
+        let dir = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appending(path: "fixture.pdf")
+        var mediaBox = CGRect(x: 0, y: 0, width: 595, height: 842)
+        guard let context = CGContext(url as CFURL, mediaBox: &mediaBox, nil) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        for (pageIndex, boxes) in pages.enumerated() {
+            context.beginPDFPage(nil)
+            for box in boxes {
+                let font = CTFontCreateWithName((box.bold ? "Helvetica-Bold" : "Helvetica") as CFString, box.fontSize, nil)
+                let attributes: [NSAttributedString.Key: Any] = [
+                    .font: font,
+                    .foregroundColor: CGColor(gray: 0, alpha: 1),
+                ]
+                let line = CTLineCreateWithAttributedString(NSAttributedString(string: box.text, attributes: attributes))
+                context.textPosition = box.rect.origin
+                CTLineDraw(line, context)
+            }
+            for box in images where box.page == pageIndex {
+                if let source = CGImageSourceCreateWithData(box.image.data as CFData, nil),
+                   let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) {
+                    context.draw(cgImage, in: box.rect)
+                }
+            }
+            context.endPDFPage()
+        }
+        context.closePDF()
         return url
     }
 }
