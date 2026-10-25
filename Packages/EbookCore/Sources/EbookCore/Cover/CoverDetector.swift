@@ -9,13 +9,16 @@ public enum CoverDetector {
 
     /// Removes and returns the cover: the first image block of the book (reading order, a part's own blocks
     /// before its children) if fewer than 200 text characters precede it, or, when `pdfFirstPageImageCoverage`
-    /// is at least 0.5, regardless of preceding text. The first image decides; one with a short side under
+    /// is at least 0.5, regardless of preceding text. With `pdfCoverCandidateID` (the measured first-page
+    /// image) and sufficient coverage, that image is the cover instead of the first one. The first image decides; one with a short side under
     /// 300 px is not a cover and nothing is removed. A chapter left with no blocks, no children and no title
     /// is dropped; titled chapters stay. Remaining image ids are not renumbered.
     public static func extractCover(
-        from document: inout BookDocument, pdfFirstPageImageCoverage: Double? = nil
+        from document: inout BookDocument, pdfFirstPageImageCoverage: Double? = nil,
+        pdfCoverCandidateID: String? = nil
     ) -> ImageAsset? {
         let ignoresText = (pdfFirstPageImageCoverage ?? 0) >= pdfCoverageThreshold
+        let candidateID = ignoresText ? pdfCoverCandidateID : nil
         var characters = 0
         var finished = false
         var cover: ImageAsset?
@@ -29,6 +32,10 @@ public enum CoverDetector {
                     characters += runs.reduce(0) { $0 + $1.text.count }
                     if characters >= textLimit, !ignoresText { finished = true }
                 case .image(let asset):
+                    if let candidateID, asset.id != candidateID {
+                        index += 1
+                        continue
+                    }
                     finished = true
                     if min(asset.pixelWidth, asset.pixelHeight) >= minimumShortSide {
                         cover = asset

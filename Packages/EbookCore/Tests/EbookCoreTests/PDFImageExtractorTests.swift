@@ -230,8 +230,8 @@ struct PDFImageExtractorTests {
         #expect(result.document.chapters.flatMap(\.blocks).count == 1)
     }
 
-    /// A page-covering image with only a little text is kept; as the first image it becomes the source cover.
-    @Test func importerKeepsFullPageImageWithShortText() async throws {
+    /// A page-covering image with only a little text is not dropped as a background; as the first image it becomes the source cover.
+    @Test func importerExtractsFullPageImageWithShortTextAsCover() async throws {
         let body = [
             "It was a bright cold day in April, and the clocks",
             "were striking thirteen and nobody looked up.",

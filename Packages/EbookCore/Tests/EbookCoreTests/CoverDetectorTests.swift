@@ -97,4 +97,43 @@ struct CoverDetectorTests {
         #expect(result.sourceCover != nil)
         #expect(result.document.allImages.isEmpty)
     }
+
+    @Test func pdfCandidateIDSelectsLargeImageOverEarlierLogo() {
+        let logo = FixtureFactory.pngImage(width: 100, height: 100, id: "img-1")
+        let large = FixtureFactory.pngImage(width: 600, height: 800, id: "img-2")
+        var document = Self.book([Chapter(blocks: [.image(logo), Self.text(500), .image(large)])])
+        let cover = CoverDetector.extractCover(from: &document, pdfFirstPageImageCoverage: 0.8, pdfCoverCandidateID: "img-2")
+        #expect(cover?.id == "img-2")
+        #expect(document.allImages.map(\.id) == ["img-1"])
+    }
+
+    /// Page 1 has well over 200 characters of text above an image; `coverage` decides.
+    private func importFirstPage(imageRect: CGRect) async throws -> ImportResult {
+        let lines = [
+            "It was a bright cold day in April, and the clocks",
+            "were striking thirteen. Winston Smith, his chin",
+            "nuzzled into his breast in an effort to escape the",
+            "vile wind, slipped quickly through the glass doors",
+            "of Victory Mansions, though not quickly enough.",
+        ]
+        let text = lines.enumerated().map { index, line in
+            FixtureTextBox(line, rect: CGRect(x: 72, y: 780 - Double(index) * 15, width: 450, height: 14))
+        }
+        let image = FixtureImageBox(page: 0, rect: imageRect, image: FixtureFactory.pngImage(width: 600, height: 800))
+        let url = try FixtureFactory.pdf(pages: [text], images: [image])
+        return try await PDFImporter().importBook(from: url, context: ImportContext())
+    }
+
+    @Test func pdfImporterLargeImageAfterLongTextIsCover() async throws {
+        // 400 x 600 on A4 (595 x 842) is about 0.48, so use a larger one: 500 x 600 is about 0.6.
+        let result = try await importFirstPage(imageRect: CGRect(x: 50, y: 50, width: 500, height: 600))
+        #expect(result.sourceCover != nil)
+        #expect(result.document.allImages.isEmpty)
+    }
+
+    @Test func pdfImporterSmallerImageAfterLongTextIsNotCover() async throws {
+        let result = try await importFirstPage(imageRect: CGRect(x: 50, y: 50, width: 300, height: 400))
+        #expect(result.sourceCover == nil)
+        #expect(result.document.allImages.count == 1)
+    }
 }
