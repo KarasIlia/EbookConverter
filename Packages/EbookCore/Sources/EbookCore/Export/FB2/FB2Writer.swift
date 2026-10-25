@@ -10,7 +10,7 @@ public struct FB2Writer: BookWriter {
     }
 
     public func write(_ document: BookDocument, cover: ImageAsset?) throws -> Data {
-        let metadata = document.metadata
+        let metadata = document.metadata.normalizedForOutput
         var binaries = BinaryRegistry()
         let coverName = cover.map { binaries.register($0, preferredStem: "cover") }
 

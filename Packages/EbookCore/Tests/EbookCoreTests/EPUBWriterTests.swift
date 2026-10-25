@@ -179,6 +179,15 @@ import Testing
         #expect(germanChapter.rootElement()?.attribute(forName: "xml:lang")?.stringValue == "de")
     }
 
+    @Test func blankTitleAndLanguageGetFallbacks() throws {
+        var document = FixtureFactory.sampleDocument()
+        document.metadata = BookMetadata(title: "  ", author: "", language: " ")
+        let opf = String(decoding: try extract(makeEPUB(document), "OEBPS/content.opf"), as: UTF8.self)
+        #expect(opf.contains("<dc:title>Book</dc:title>"))
+        #expect(opf.contains("<dc:language>und</dc:language>"))
+        #expect(opf.contains("xml:lang=\"und\""))
+    }
+
     @Test func outputIsDeterministic() throws {
         #expect(try makeEPUB() == makeEPUB())
     }
@@ -194,12 +203,14 @@ import Testing
     }
 
     @Test(.enabled(if: ProcessInfo.processInfo.environment["EPUBCHECK_JAR"] != nil),
-          arguments: ["cover", "noCover", "rtl"])
+          arguments: ["cover", "noCover", "rtl", "blankTitle"])
     func epubcheckPasses(variant: String) throws {
         let jar = ProcessInfo.processInfo.environment["EPUBCHECK_JAR"] ?? ""
         let epub = switch variant {
         case "noCover": try makeEPUB(withCover: false)
         case "rtl": try makeEPUB(FixtureFactory.sampleDocument(language: "ar"))
+        case "blankTitle":
+            try makeEPUB(BookDocument(metadata: BookMetadata(title: " ", author: " ", language: ""), chapters: FixtureFactory.sampleDocument().chapters))
         default: try makeEPUB()
         }
         try withTempFile(epub) { url in

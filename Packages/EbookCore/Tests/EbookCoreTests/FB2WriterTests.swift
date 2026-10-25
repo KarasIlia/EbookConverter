@@ -49,6 +49,16 @@ struct FB2WriterTests {
         #expect(try strings(doc, "\(titleInfo)/*[local-name()='author']/*[local-name()='nickname']") == ["Unknown"])
     }
 
+    @Test func blankTitleAndLanguageGetFallbacks() throws {
+        let document = BookDocument(
+            metadata: BookMetadata(title: " ", author: "A", language: ""),
+            chapters: [Chapter(title: "C", blocks: [.paragraph([InlineRun("x")])])]
+        )
+        let doc = try xml(document)
+        #expect(try strings(doc, "\(titleInfo)/*[local-name()='book-title']") == ["Book"])
+        #expect(try strings(doc, "\(titleInfo)/*[local-name()='lang']") == ["und"])
+    }
+
     @Test func languageIsWritten() throws {
         let doc = try xml(document(author: "A", language: "ar"))
         #expect(try strings(doc, "\(titleInfo)/*[local-name()='lang']") == ["ar"])

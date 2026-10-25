@@ -24,7 +24,7 @@ public struct EPUBWriter: BookWriter {
     }
 
     public func write(_ document: BookDocument, cover: ImageAsset?) throws -> Data {
-        let metadata = document.metadata
+        let metadata = document.metadata.normalizedForOutput
         let rtl = metadata.isRightToLeft
         let identifier = document.identifier.uuidString
 

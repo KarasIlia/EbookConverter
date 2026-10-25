@@ -18,3 +18,22 @@ extension BookMetadata {
         Locale.Language(identifier: language).characterDirection == .rightToLeft
     }
 }
+
+extension BookMetadata {
+    /// Title written when a book has none.
+    static let fallbackTitle = "Book"
+    /// Language tag written when a book has none.
+    static let undeterminedLanguage = "und"
+
+    /// The metadata as writers emit it: fields trimmed, a blank title replaced by `fallbackTitle`
+    /// and a blank language by `und`, since EPUB and FB2 require both.
+    var normalizedForOutput: BookMetadata {
+        let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let language = language.trimmingCharacters(in: .whitespacesAndNewlines)
+        return BookMetadata(
+            title: title.isEmpty ? Self.fallbackTitle : title,
+            author: author.trimmingCharacters(in: .whitespacesAndNewlines),
+            language: language.isEmpty ? Self.undeterminedLanguage : language
+        )
+    }
+}
