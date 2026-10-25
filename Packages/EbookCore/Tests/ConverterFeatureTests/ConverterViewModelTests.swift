@@ -285,6 +285,17 @@ import EbookCore
         #expect(converter.recorded.writtenDocuments.last?.metadata.title == "Edited")
     }
 
+    @Test func exportTitleMatchesWrittenTitle() async throws {
+        let (model, converter, _) = makeModel()
+        await model.open(bookURL)
+        model.title = " Edited "
+        #expect(model.exportTitle == "Edited")
+        model.title = ""
+        #expect(model.exportTitle == "Война и мир")
+        _ = try model.exportData()
+        #expect(converter.recorded.writtenDocuments.last?.metadata.title == model.exportTitle)
+    }
+
     @Test func blankTitleExportsNonEmptyTitleWithRealConverter() async throws {
         let dir = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

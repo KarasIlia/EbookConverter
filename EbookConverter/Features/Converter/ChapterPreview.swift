@@ -1,7 +1,7 @@
 import SwiftUI
 import EbookCore
 
-/// Read-only rendering of one chapter from the intermediate model.
+/// Read-only rendering of one chapter from the intermediate model: its title heading, then its blocks, as exported.
 struct ChapterPreview: View {
     let chapter: Chapter
     /// Lays the text out right to left (Arabic, Hebrew…), as the exported book will be.
@@ -13,6 +13,12 @@ struct ChapterPreview: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading) {
+                // The writers put the chapter title above its text.
+                if let heading = TableOfContentsLabel.heading(of: chapter) {
+                    Text(heading)
+                        .font(.title.bold())
+                        .padding(.bottom)
+                }
                 ForEach(chapter.blocks.enumerated(), id: \.offset) { _, block in
                     BlockView(block: block, imageCache: imageCache)
                 }

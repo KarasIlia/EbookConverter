@@ -75,6 +75,15 @@ import EbookCore
         if case .ready(let size) = sizeStatus { size } else { nil }
     }
 
+    /// The title written into the output: the edited title, trimmed; if blank, the file's own title,
+    /// then the file name, then "Book" (EPUB and FB2 require one).
+    public var exportTitle: String {
+        let titles = [title, document?.metadata.title ?? "", fileURL?.deletingPathExtension().lastPathComponent ?? ""]
+        return titles.lazy
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty } ?? "Book"
+    }
+
     /// Title made safe for a file name, plus the output format's extension.
     public var suggestedFileName: String {
         let replaced = String(title.map { Self.forbiddenFileNameCharacters.contains($0) ? " " : $0 })
@@ -274,14 +283,9 @@ import EbookCore
         isApplyingChanges = false
     }
 
-    /// The document with the edited metadata, trimmed. A blank title falls back to the file's own title,
-    /// then to the file name, then to "Book": EPUB and FB2 require one.
+    /// The document with the edited metadata, trimmed, titled `exportTitle`.
     private func editedDocument() -> BookDocument? {
         guard var document else { return nil }
-        let titles = [title, document.metadata.title, fileURL?.deletingPathExtension().lastPathComponent ?? ""]
-        let exportTitle = titles.lazy
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .first { !$0.isEmpty } ?? "Book"
         document.metadata = BookMetadata(
             title: exportTitle,
             author: author.trimmingCharacters(in: .whitespacesAndNewlines),

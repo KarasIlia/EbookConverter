@@ -1,16 +1,17 @@
 import SwiftUI
+import EbookCore
 
-/// A chapter title, or "Untitled" for chapters without one.
+/// A chapter's table-of-contents label, exactly as the exported book shows it; labels of untitled chapters
+/// (the book title or "…") are dimmed.
 struct ChapterTitleLabel: View {
-    let title: String?
+    let chapter: Chapter
+    /// Whether this is the book's first chapter, which the book labels with its title when it has none.
+    let isFirst: Bool
+    let bookTitle: String
 
     var body: some View {
-        if let title = title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
-            Text(title)
-                .lineLimit(2)
-        } else {
-            Text(.untitledSection)
-                .foregroundStyle(.secondary)
-        }
+        Text(TableOfContentsLabel.label(for: chapter, isFirst: isFirst, bookTitle: bookTitle))
+            .lineLimit(2)
+            .foregroundStyle(TableOfContentsLabel.heading(of: chapter) == nil ? .secondary : .primary)
     }
 }

@@ -16,7 +16,11 @@ struct BookWorkspaceView: View {
 
     var body: some View {
         NavigationSplitView {
-            ChapterSidebar(chapters: viewModel.document?.chapters ?? [], selection: $viewModel.selectedChapterID)
+            ChapterSidebar(
+                chapters: viewModel.document?.chapters ?? [],
+                bookTitle: viewModel.exportTitle,
+                selection: $viewModel.selectedChapterID
+            )
                 .navigationSplitViewColumnWidth(min: 180, ideal: 240, max: 360)
         } detail: {
             VStack(spacing: 0) {

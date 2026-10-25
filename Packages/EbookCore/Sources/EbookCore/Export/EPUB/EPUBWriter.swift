@@ -117,8 +117,8 @@ public struct EPUBWriter: BookWriter {
     /// Emits the file for `chapter` (then for its children, depth-first) and returns its TOC node.
     private func makeNode(_ chapter: Chapter, depth: Int, bookTitle: String, files: inout [ChapterFile]) -> Node {
         let fileName = "chapter-\(Self.padded(files.count + 1)).xhtml"
-        let title = chapter.title.flatMap { $0.isEmpty ? nil : $0 }
-        let label = title ?? (files.isEmpty ? bookTitle : "\u{2026}")
+        let title = TableOfContentsLabel.heading(of: chapter)
+        let label = TableOfContentsLabel.label(for: chapter, isFirst: files.isEmpty, bookTitle: bookTitle)
 
         var body: [String] = []
         if let title {

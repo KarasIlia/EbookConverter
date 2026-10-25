@@ -76,7 +76,7 @@ public struct FB2Writer: BookWriter {
     /// FB2 forbids mixing content and child sections, so a part's own blocks go into a leading untitled section.
     private static func section(_ chapter: Chapter, binaries: inout BinaryRegistry) -> String {
         var lines: [String] = ["<section>"]
-        if let title = chapter.title, !title.isEmpty {
+        if let title = TableOfContentsLabel.heading(of: chapter) {
             lines.append("<title><p>\(XMLEscaping.escape(title))</p></title>")
         }
         let own = chapter.blocks.map { markup(for: $0, binaries: &binaries) }
