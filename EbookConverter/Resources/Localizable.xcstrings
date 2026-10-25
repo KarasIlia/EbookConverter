@@ -35,6 +35,23 @@
         }
       }
     },
+    "chooseCover": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose…"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выбрать…"
+          }
+        }
+      }
+    },
     "chooseOnDisk": {
       "extractionState": "manual",
       "localizations": {
@@ -69,19 +86,87 @@
         }
       }
     },
-    "coverPlaceholder": {
+    "coverAccessibility": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Cover"
+            "value": "Cover. Drop an image to replace it"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Обложка"
+            "value": "Обложка. Перетащите картинку, чтобы заменить"
+          }
+        }
+      }
+    },
+    "coverCustom": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Custom cover"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Своя обложка"
+          }
+        }
+      }
+    },
+    "coverDropHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drop an image"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Перетащите картинку"
+          }
+        }
+      }
+    },
+    "coverFromFile": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cover from the file"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обложка из файла"
+          }
+        }
+      }
+    },
+    "coverGenerated": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cover created automatically"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обложка создана автоматически"
           }
         }
       }
@@ -273,6 +358,57 @@
         }
       }
     },
+    "folderAccessFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't load the images"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось загрузить картинки"
+          }
+        }
+      }
+    },
+    "folderAccessMessage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The file has images — allow access to its folder to keep them"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В файле есть картинки — разрешите доступ к папке, чтобы сохранить их"
+          }
+        }
+      }
+    },
+    "grantFolderAccess": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow Access…"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Разрешить доступ…"
+          }
+        }
+      }
+    },
     "languageUnknown": {
       "extractionState": "manual",
       "localizations": {
@@ -337,6 +473,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Иллюстрация"
+          }
+        }
+      }
+    },
+    "resetCover": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reset"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сбросить"
           }
         }
       }

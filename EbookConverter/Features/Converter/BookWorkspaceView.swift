@@ -8,6 +8,8 @@ struct BookWorkspaceView: View {
     @Bindable var viewModel: ConverterViewModel
 
     @State private var isImporterPresented = false
+    /// Failure of the last folder-access re-import, shown in an alert; the loaded book stays.
+    @State private var folderAccessError: ImportError?
 
     var body: some View {
         NavigationSplitView {
@@ -16,6 +18,9 @@ struct BookWorkspaceView: View {
         } detail: {
             VStack(spacing: 0) {
                 WarningBanner(warnings: viewModel.warnings)
+                if let folder = imagesFolder {
+                    FolderAccessBanner(folder: folder, onGrant: grantFolderAccess)
+                }
                 if let document = viewModel.document,
                    let id = viewModel.selectedChapterID,
                    let chapter = document.chapter(withID: id) {
@@ -46,6 +51,14 @@ struct BookWorkspaceView: View {
             open(url)
             return true
         }
+        .alert(
+            Text(.folderAccessFailed),
+            isPresented: Binding { folderAccessError != nil } set: { if !$0 { folderAccessError = nil } },
+            presenting: folderAccessError
+        ) { _ in
+        } message: { error in
+            Text(ConverterRootView.message(for: error))
+        }
         .frame(minWidth: ConverterLayout.workspaceMinSize.width, minHeight: ConverterLayout.workspaceMinSize.height)
         .onAppear {
             WindowGrowth.grow(NSApp.keyWindow ?? NSApp.mainWindow, toContentSize: ConverterLayout.workspaceIdealSize)
@@ -57,8 +70,23 @@ struct BookWorkspaceView: View {
         BookMetadata(title: "", author: "", language: viewModel.language).isRightToLeft
     }
 
+    /// Folder of images the sandbox could not read, if the import reported one.
+    private var imagesFolder: URL? {
+        viewModel.warnings.lazy.compactMap { warning in
+            if case .imagesNeedFolderAccess(let folder) = warning { folder } else { nil }
+        }.first
+    }
+
     private func open(_ url: URL) {
         Task { await viewModel.open(url) }
+    }
+
+    /// Re-imports the book with access to `folder`; on success the warning (and banner) is replaced.
+    private func grantFolderAccess(_ folder: URL) {
+        Task {
+            await viewModel.grantFolderAccess(folder)
+            folderAccessError = viewModel.lastError
+        }
     }
 }
 

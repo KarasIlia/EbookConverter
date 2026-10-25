@@ -15,20 +15,12 @@ struct InspectorView: View {
     var body: some View {
         Form {
             Section {
-                // Replaced by the cover well in Task 19.
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(.quaternary)
-                    .aspectRatio(2 / 3, contentMode: .fit)
-                    .overlay {
-                        Label {
-                            Text(.coverPlaceholder)
-                        } icon: {
-                            Image(systemName: "book.closed")
-                        }
-                        .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: 160)
-                    .frame(maxWidth: .infinity)
+                CoverWell(
+                    cover: viewModel.cover,
+                    source: viewModel.coverSource,
+                    onSetCover: viewModel.setCustomCover,
+                    onReset: viewModel.resetCover
+                )
             }
 
             Section {

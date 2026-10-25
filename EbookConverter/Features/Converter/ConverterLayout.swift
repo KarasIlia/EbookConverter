@@ -10,4 +10,6 @@ enum ConverterLayout {
     static let workspaceIdealSize = CGSize(width: 1100, height: 700)
     /// Maximum width of the preview's text column, for comfortable line length.
     static let previewTextColumnWidth: CGFloat = 720
+    /// Maximum width of the cover well in the inspector.
+    static let coverWellWidth: CGFloat = 160
 }

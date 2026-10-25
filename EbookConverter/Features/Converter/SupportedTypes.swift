@@ -14,4 +14,7 @@ enum SupportedTypes {
         .epub,
         UTType("ru.fictionbook.fb2"),
     ].compactMap(\.self)
+
+    /// Image types accepted as a custom cover, by drag and drop or in the file importer.
+    static let coverImages: [UTType] = [.jpeg, .png, .heic, .tiff]
 }

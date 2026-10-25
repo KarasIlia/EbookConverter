@@ -24,7 +24,7 @@ struct WarningBanner: View {
         }
     }
 
-    /// User-facing text for a warning; `nil` for warnings handled elsewhere (folder access, Task 19).
+    /// User-facing text for a warning; `nil` for warnings handled elsewhere (folder access: `FolderAccessBanner`).
     static func message(for warning: ImportWarning) -> LocalizedStringResource? {
         switch warning {
         case .noChaptersFound: .warningNoChapters
