@@ -8,8 +8,9 @@ public enum ImageNormalizer {
 
     /// Returns an asset whose `contentType` is `.jpeg` or `.png`, or `nil` if `data` is not a readable image.
     ///
-    /// JPEG and PNG whose long side fits in `maxPixelSize` are kept byte-for-byte. Anything else is
-    /// re-encoded (downscaled if needed) as JPEG, or as PNG when the image has an alpha channel.
+    /// Upright JPEG and PNG whose long side fits in `maxPixelSize` are kept byte-for-byte. Anything else
+    /// (including images with an EXIF orientation other than 1) is re-encoded with the orientation applied,
+    /// downscaled if needed, as JPEG, or as PNG when the image has an alpha channel.
     public static func normalize(_ data: Data, id: String, maxPixelSize: Int = 1600) -> ImageAsset? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),
               CGImageSourceGetCount(source) > 0,
@@ -20,15 +21,10 @@ public enum ImageNormalizer {
 
         let sourceType = CGImageSourceGetType(source).flatMap { UTType($0 as String) }
         let longSide = max(width, height)
-        if longSide <= maxPixelSize {
-            if sourceType == .jpeg || sourceType == .png {
-                let oriented = (properties[kCGImagePropertyOrientation] as? Int ?? 1) > 4
-                // EXIF orientations 5...8 swap the displayed axes.
-                return ImageAsset(
-                    id: id, data: data, contentType: sourceType ?? .jpeg,
-                    pixelWidth: oriented ? height : width, pixelHeight: oriented ? width : height
-                )
-            }
+        // Readers such as PocketBook ignore EXIF orientation, so rotated images are re-encoded upright.
+        let isUpright = (properties[kCGImagePropertyOrientation] as? Int ?? 1) == 1
+        if longSide <= maxPixelSize, isUpright, sourceType == .jpeg || sourceType == .png {
+            return ImageAsset(id: id, data: data, contentType: sourceType ?? .jpeg, pixelWidth: width, pixelHeight: height)
         }
 
         let options: [CFString: Any] = [

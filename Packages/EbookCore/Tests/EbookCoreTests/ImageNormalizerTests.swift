@@ -36,6 +36,27 @@ import UniformTypeIdentifiers
         #expect(asset.pixelHeight == 200)
     }
 
+    @Test func rotatedJPEGIsReencodedUpright() throws {
+        let png = FixtureFactory.pngImage(width: 300, height: 200).data
+        let source = try #require(CGImageSourceCreateWithData(png as CFData, nil))
+        let image = try #require(CGImageSourceCreateImageAtIndex(source, 0, nil))
+        let out = NSMutableData()
+        let destination = try #require(CGImageDestinationCreateWithData(out, UTType.jpeg.identifier as CFString, 1, nil))
+        CGImageDestinationAddImage(destination, image, [kCGImagePropertyOrientation: 6] as CFDictionary)
+        #expect(CGImageDestinationFinalize(destination))
+        let data = out as Data
+
+        let asset = try #require(ImageNormalizer.normalize(data, id: "img-7"))
+        #expect(asset.data != data)
+        #expect(asset.contentType == .jpeg)
+        #expect(asset.pixelWidth == 200 && asset.pixelHeight == 300)
+        let written = try #require(CGImageSourceCreateWithData(asset.data as CFData, nil))
+        let properties = try #require(CGImageSourceCopyPropertiesAtIndex(written, 0, nil) as? [CFString: Any])
+        #expect(properties[kCGImagePropertyPixelWidth] as? Int == 200)
+        #expect(properties[kCGImagePropertyPixelHeight] as? Int == 300)
+        #expect((properties[kCGImagePropertyOrientation] as? Int ?? 1) == 1)
+    }
+
     @Test func normalizerKeepsSmallPNG() throws {
         let data = try encoded(40, 30, type: .png)
         let asset = try #require(ImageNormalizer.normalize(data, id: "img-3"))
