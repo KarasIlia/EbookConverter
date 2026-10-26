@@ -664,6 +664,23 @@
         }
       }
     },
+    "toggleInspector": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show or Hide Book Settings"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показать или скрыть настройки книги"
+          }
+        }
+      }
+    },
     "warningContentPartiallyUnreadable": {
       "extractionState": "manual",
       "localizations": {

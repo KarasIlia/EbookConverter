@@ -15,6 +15,8 @@ struct BookWorkspaceView: View {
     @State private var isCoverImageUnreadable = false
     /// Width of the preview column; the file name in the toolbar is truncated to fit it.
     @State private var detailWidth: CGFloat = 0
+    /// The user can hide the inspector (button or by dragging it closed) and bring it back with the toolbar button.
+    @State private var isInspectorPresented = true
 
     /// "FB2 file" for the opened book, shown under the file name in the window title.
     private var sourceSubtitle: Text {
@@ -48,17 +50,20 @@ struct BookWorkspaceView: View {
             }
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { detailWidth = $0 }
         }
-        .inspector(isPresented: .constant(true)) {
+        .inspector(isPresented: $isInspectorPresented) {
             InspectorView(viewModel: viewModel)
                 .inspectorColumnWidth(min: 260, ideal: 300, max: 400)
-                .toolbar {
-                    // Attached to the inspector so it stays at the window's trailing edge, away from the file name.
-                    ToolbarItem(placement: .primaryAction) {
-                        Button(.openFile, systemImage: "folder") {
-                            isImporterPresented = true
-                        }
-                    }
+        }
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button(.openFile, systemImage: "folder") {
+                    isImporterPresented = true
                 }
+                Button(.toggleInspector, systemImage: "sidebar.trailing") {
+                    isInspectorPresented.toggle()
+                }
+                .help(Text(.toggleInspector))
+            }
         }
         .navigationTitle(TitleFitting.fitted(
             viewModel.sourceFileName ?? "", toWidth: detailWidth - ConverterLayout.titleHorizontalInset
