@@ -1,6 +1,19 @@
-.superpowers/
+# macOS
 .DS_Store
+
+# Xcode
 xcuserdata/
 DerivedData/
-tools/epubcheck/
+build/
+*.xcresult
+*.moved-aside
+
+# Swift Package Manager
 .build/
+.swiftpm/
+
+# Downloaded tools (fetched by tools/epubcheck.sh)
+tools/epubcheck/
+
+# Agent workspaces (plans in progress, review packages)
+.superpowers/
