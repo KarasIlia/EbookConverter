@@ -28,7 +28,7 @@ struct ExportBar: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.glassProminent)
-            .controlSize(.large)
+            .controlSize(.extraLarge)
             .disabled(isDisabled)
         }
         .padding()
