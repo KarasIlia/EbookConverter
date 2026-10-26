@@ -13,6 +13,8 @@ struct BookWorkspaceView: View {
     /// Failure of opening another file over the loaded book, shown in an alert; the loaded book stays.
     @State private var openError: ImportError?
     @State private var isCoverImageUnreadable = false
+    /// Width of the preview column; the file name in the toolbar is truncated to fit it.
+    @State private var detailWidth: CGFloat = 0
 
     /// "FB2 file" for the opened book, shown under the file name in the window title.
     private var sourceSubtitle: Text {
@@ -44,19 +46,24 @@ struct BookWorkspaceView: View {
                     Spacer()
                 }
             }
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { detailWidth = $0 }
         }
         .inspector(isPresented: .constant(true)) {
             InspectorView(viewModel: viewModel)
                 .inspectorColumnWidth(min: 260, ideal: 300, max: 400)
+                .toolbar {
+                    // Attached to the inspector so it stays at the window's trailing edge, away from the file name.
+                    ToolbarItem(placement: .primaryAction) {
+                        Button(.openFile, systemImage: "folder") {
+                            isImporterPresented = true
+                        }
+                    }
+                }
         }
-        // The toolbar title doesn't truncate next to the inspector, so long file names are shortened here.
-        .navigationTitle((viewModel.sourceFileName ?? "").middleTruncated(maxLength: ConverterLayout.windowTitleMaxLength))
+        .navigationTitle(TitleFitting.fitted(
+            viewModel.sourceFileName ?? "", toWidth: detailWidth - ConverterLayout.titleHorizontalInset
+        ))
         .navigationSubtitle(sourceSubtitle)
-        .toolbar {
-            Button(.openFile, systemImage: "folder") {
-                isImporterPresented = true
-            }
-        }
         .fileImporter(isPresented: $isImporterPresented, allowedContentTypes: SupportedTypes.inputs) { result in
             if case .success(let url) = result {
                 open(url)
