@@ -121,10 +121,8 @@ tools/epubcheck.sh book.epub
 EbookConverter/            приложение: окно, предпросмотр, инспектор, обложка
 Packages/EbookCore/        вся логика конвертации и модель окна (Swift-пакет)
 tools/epubcheck.sh         проверка EPUB официальным валидатором
-docs/acceptance.md         результаты приёмки и ручной чек-лист
 ```
 
-Результаты приёмочной проверки и ручной чек-лист — в [docs/acceptance.md](docs/acceptance.md).
 
 ## Статус
 
