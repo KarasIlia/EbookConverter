@@ -17,3 +17,10 @@ tools/epubcheck/
 
 # Agent workspaces (plans in progress, review packages)
 .superpowers/
+
+# Agent-only files: kept locally, never pushed
+AGENTS.md
+CLAUDE.md
+docs/specs/
+docs/plans/
+docs/implementation-rulings.md
