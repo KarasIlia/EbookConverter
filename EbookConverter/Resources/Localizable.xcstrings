@@ -18,6 +18,23 @@
         }
       }
     },
+    "bookDetails": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Book details"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Данные книги"
+          }
+        }
+      }
+    },
     "bookSize": {
       "extractionState": "manual",
       "localizations": {
@@ -439,6 +456,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Разрешить доступ…"
+          }
+        }
+      }
+    },
+    "languageHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The language of the book's text. E-readers use it for hyphenation and the dictionary."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Язык текста книги. По нему читалка выбирает правила переносов и словарь."
           }
         }
       }

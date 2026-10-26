@@ -49,7 +49,8 @@ struct BookWorkspaceView: View {
             InspectorView(viewModel: viewModel)
                 .inspectorColumnWidth(min: 260, ideal: 300, max: 400)
         }
-        .navigationTitle(viewModel.sourceFileName ?? "")
+        // The toolbar title doesn't truncate next to the inspector, so long file names are shortened here.
+        .navigationTitle((viewModel.sourceFileName ?? "").middleTruncated(maxLength: ConverterLayout.windowTitleMaxLength))
         .navigationSubtitle(sourceSubtitle)
         .toolbar {
             Button(.openFile, systemImage: "folder") {

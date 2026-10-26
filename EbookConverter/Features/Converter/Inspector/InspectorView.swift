@@ -1,5 +1,4 @@
 import SwiftUI
-import AppKit
 import ConverterFeature
 import EbookCore
 
@@ -24,12 +23,8 @@ struct InspectorView: View {
             }
 
             Section {
-                TextField(text: $viewModel.title) {
-                    Text(.fieldTitle)
-                }
-                TextField(text: $viewModel.author) {
-                    Text(.fieldAuthor)
-                }
+                MetadataTextField(label: .fieldTitle, text: $viewModel.title)
+                MetadataTextField(label: .fieldAuthor, text: $viewModel.author)
                 Picker(selection: languageSelection) {
                     ForEach(LanguageOption.options(bookLanguage: viewModel.document?.metadata.language ?? "")) { option in
                         if let name = option.name {
@@ -41,6 +36,12 @@ struct InspectorView: View {
                 } label: {
                     Text(.fieldLanguage)
                 }
+            } header: {
+                Text(.bookDetails)
+            } footer: {
+                Text(.languageHint)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
 
             Section {
@@ -64,32 +65,16 @@ struct InspectorView: View {
                 BookSizeLabel(status: viewModel.sizeStatus)
             }
 
-            Section {
-                Button(action: export) {
-                    Text(.convert)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.glassProminent)
-                .controlSize(.large)
-                .disabled(viewModel.sizeStatus == .failed)
-
-                if let savedURL {
-                    LabeledContent {
-                        Button(.showInFinder, systemImage: "folder") {
-                            NSWorkspace.shared.activateFileViewerSelecting([savedURL])
-                        }
-                    } label: {
-                        Label {
-                            Text(.savedConfirmation)
-                        } icon: {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(.green)
-                        }
-                    }
-                }
-            }
         }
         .formStyle(.grouped)
+        // The primary action stays visible however long the form gets.
+        .safeAreaInset(edge: .bottom) {
+            ExportBar(
+                isDisabled: viewModel.sizeStatus == .failed,
+                savedURL: savedURL,
+                onExport: export
+            )
+        }
         .fileExporter(
             isPresented: $isExporterPresented,
             document: exportedFile,
