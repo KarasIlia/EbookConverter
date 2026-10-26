@@ -22,6 +22,7 @@
 				<string>com.adobe.pdf</string>
 				<string>org.idpf.epub-container</string>
 				<string>ru.fictionbook.fb2</string>
+				<string>public.fb2</string>
 			</array>
 		</dict>
 	</array>

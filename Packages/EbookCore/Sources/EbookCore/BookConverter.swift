@@ -31,6 +31,7 @@ public struct BookConverter: Sendable {
         if result.sourceCover == nil, Self.coverDetectedFormats.contains(format) {
             result.sourceCover = CoverDetector.extractCover(from: &result.document)
         }
+        result.sourceFormat = format
         return result
     }
 

@@ -26,7 +26,25 @@ import EbookCore
     }
 
     public var outputFormat: OutputFormat = .epub {
-        didSet { scheduleSizeComputation() }
+        didSet {
+            // Converting a book into its own format is pointless; keep the choice within the available formats.
+            if !availableOutputFormats.contains(outputFormat), let fallback = availableOutputFormats.first {
+                outputFormat = fallback
+                return
+            }
+            scheduleSizeComputation()
+        }
+    }
+
+    /// Detected format of the opened file; `nil` when no book is loaded.
+    public private(set) var sourceFormat: SourceFormat?
+
+    /// Name of the opened file, e.g. "Book.fb2"; `nil` when no book is loaded.
+    public private(set) var sourceFileName: String?
+
+    /// Output formats that make sense for the opened file: an EPUB or FB2 book can't be converted into its own format.
+    public var availableOutputFormats: [OutputFormat] {
+        OutputFormat.allCases.filter { $0 != sourceFormat?.sameOutputFormat }
     }
 
     public private(set) var cover: ImageAsset? {
@@ -222,6 +240,11 @@ import EbookCore
             language = result.document.metadata.language
         }
         selectedChapterID = result.document.leafChapters.first?.id
+        sourceFormat = result.sourceFormat
+        sourceFileName = fileURL?.lastPathComponent
+        if !availableOutputFormats.contains(outputFormat), let fallback = availableOutputFormats.first {
+            outputFormat = fallback
+        }
         isApplyingChanges = false
         state = .loaded
         refreshCover()  // assigning `cover` schedules the size computation
@@ -235,6 +258,8 @@ import EbookCore
         lastError = nil
         converter = nil
         fileURL = nil
+        sourceFormat = nil
+        sourceFileName = nil
         document = nil
         warnings = []
         sourceCover = nil

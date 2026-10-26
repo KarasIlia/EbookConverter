@@ -64,4 +64,13 @@ import UniformTypeIdentifiers
         #expect(OutputFormat.fb2.contentType.identifier == "ru.fictionbook.fb2")
         #expect(OutputFormat.fb2.contentType.conforms(to: .xml))
     }
+
+    @Test func sourceFormatNamesAndSameOutput() {
+        #expect(SourceFormat.fb2.displayName == "FB2")
+        #expect(SourceFormat.markdown.displayName == "Markdown")
+        #expect(SourceFormat.docx.displayName == "DOCX")
+        #expect(SourceFormat.epub.sameOutputFormat == .epub)
+        #expect(SourceFormat.fb2.sameOutputFormat == .fb2)
+        #expect(SourceFormat.pdf.sameOutputFormat == nil)
+    }
 }

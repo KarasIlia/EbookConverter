@@ -46,12 +46,20 @@ struct InspectorView: View {
             Section {
                 Picker(selection: $viewModel.outputFormat) {
                     ForEach(OutputFormat.allCases, id: \.self) { format in
-                        Text(verbatim: format.rawValue.uppercased()).tag(format)
+                        Text(verbatim: format.rawValue.uppercased())
+                            .tag(format)
+                            .selectionDisabled(!viewModel.availableOutputFormats.contains(format))
                     }
                 } label: {
                     Text(.fieldFormat)
                 }
                 .pickerStyle(.segmented)
+
+                if let sameFormat = viewModel.sourceFormat?.sameOutputFormat {
+                    Text(.formatSameAsSource(sameFormat.rawValue.uppercased()))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
 
                 BookSizeLabel(status: viewModel.sizeStatus)
             }

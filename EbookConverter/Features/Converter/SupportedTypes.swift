@@ -14,10 +14,16 @@ enum SupportedTypes {
         .pdf,
         .epub,
         UTType("ru.fictionbook.fb2"),
-    ].compactMap(\.self)
+    ].compactMap(\.self) + extensionTypes
+
+    /// Types the system currently maps our file extensions to. Another app may declare its own type for an
+    /// extension (e.g. a browser declaring `public.fb2` for `.fb2`), and then files carry that type instead of ours.
+    private static let extensionTypes: [UTType] = [
+        "txt", "text", "md", "markdown", "rtf", "doc", "docx", "htm", "html", "xhtml", "pdf", "epub", "fb2",
+    ].compactMap { UTType(filenameExtension: $0) }
 
     /// Image types accepted as a custom cover, by drag and drop or in the file importer.
-    static let coverImages: [UTType] = [.jpeg, .png, .heic, .tiff]
+    static let coverImages: [UTType] = [.jpeg, .png, .heic, .tiff, .webP]
 
     /// `true` if the file at `url` has one of `types`, judged by the file system's content type
     /// (or, failing that, by the file name extension).

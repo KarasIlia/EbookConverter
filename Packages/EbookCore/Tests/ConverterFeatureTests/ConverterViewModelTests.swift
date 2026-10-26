@@ -24,19 +24,47 @@ import EbookCore
         cover: ImageAsset? = nil,
         warnings: [ImportWarning] = [],
         failure: (any Error)? = nil,
-        originalTitle: String? = nil
+        originalTitle: String? = nil,
+        sourceFormat: SourceFormat? = nil
     ) -> (ConverterViewModel, FakeConverter, FakeCoverGenerator) {
         var document = document()
         if let originalTitle { document.metadata.title = originalTitle }
         let result: Result<ImportResult, any Error> = if let failure {
             .failure(failure)
         } else {
-            .success(ImportResult(document: document, sourceCover: cover, warnings: warnings))
+            .success(ImportResult(document: document, sourceCover: cover, warnings: warnings, sourceFormat: sourceFormat))
         }
         let converter = FakeConverter(result: result)
         let generator = FakeCoverGenerator()
         let model = ConverterViewModel(makeConverter: { _ in converter }, coverGenerator: generator)
         return (model, converter, generator)
+    }
+
+    @Test(arguments: [(SourceFormat.epub, OutputFormat.fb2), (.fb2, .epub)])
+    func bookFormatSourceExcludesSameOutput(source: SourceFormat, expected: OutputFormat) async {
+        let (model, _, _) = makeModel(sourceFormat: source)
+        model.outputFormat = source == .epub ? .epub : .fb2
+        await model.open(bookURL)
+        #expect(model.sourceFormat == source)
+        #expect(model.availableOutputFormats == [expected])
+        #expect(model.outputFormat == expected)
+        model.outputFormat = source == .epub ? .epub : .fb2
+        #expect(model.outputFormat == expected)
+    }
+
+    @Test func documentSourceKeepsBothOutputsAndFileName() async {
+        let (model, _, _) = makeModel(sourceFormat: .txt)
+        await model.open(bookURL)
+        #expect(model.availableOutputFormats == [.epub, .fb2])
+        #expect(model.outputFormat == .epub)
+        #expect(model.sourceFileName == "My Book.txt")
+    }
+
+    @Test func fileNameClearedWhenOpenFails() async {
+        let (model, _, _) = makeModel(failure: ImportError.emptyDocument)
+        await model.open(bookURL)
+        #expect(model.sourceFileName == nil)
+        #expect(model.sourceFormat == nil)
     }
 
     @Test func initialStateIsEmpty() {

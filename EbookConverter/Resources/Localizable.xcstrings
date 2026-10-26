@@ -409,6 +409,23 @@
         }
       }
     },
+    "formatSameAsSource": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The file is already %@, so it can only be converted to another format."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Файл уже в формате %@ — его можно сконвертировать только в другой формат."
+          }
+        }
+      }
+    },
     "grantFolderAccess": {
       "extractionState": "manual",
       "localizations": {
@@ -575,6 +592,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Не удалось собрать книгу"
+          }
+        }
+      }
+    },
+    "sourceFormatSubtitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ file"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Файл %@"
           }
         }
       }

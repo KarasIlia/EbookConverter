@@ -103,4 +103,16 @@ import Foundation
             #expect(first == second)
         }
     }
+
+    @Test func importReportsSourceFormat() async throws {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "BookConverterTests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let epubURL = dir.appending(path: "book.epub")
+        try BookConverter().write(FixtureFactory.sampleDocument(), cover: nil, as: .epub).write(to: epubURL)
+        let txtURL = dir.appending(path: "notes.txt")
+        try Data("Глава 1\n\nТекст.".utf8).write(to: txtURL)
+        #expect(try await BookConverter().importBook(from: epubURL, context: ImportContext()).sourceFormat == .epub)
+        #expect(try await BookConverter().importBook(from: txtURL, context: ImportContext()).sourceFormat == .txt)
+    }
 }

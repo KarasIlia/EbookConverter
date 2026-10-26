@@ -14,6 +14,12 @@ struct BookWorkspaceView: View {
     @State private var openError: ImportError?
     @State private var isCoverImageUnreadable = false
 
+    /// "FB2 file" for the opened book, shown under the file name in the window title.
+    private var sourceSubtitle: Text {
+        guard let format = viewModel.sourceFormat else { return Text(verbatim: "") }
+        return Text(.sourceFormatSubtitle(format.displayName))
+    }
+
     var body: some View {
         NavigationSplitView {
             ChapterSidebar(
@@ -43,6 +49,8 @@ struct BookWorkspaceView: View {
             InspectorView(viewModel: viewModel)
                 .inspectorColumnWidth(min: 260, ideal: 300, max: 400)
         }
+        .navigationTitle(viewModel.sourceFileName ?? "")
+        .navigationSubtitle(sourceSubtitle)
         .toolbar {
             Button(.openFile, systemImage: "folder") {
                 isImporterPresented = true
