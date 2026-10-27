@@ -32,7 +32,8 @@ public enum PDFLineExtractor {
                   !bounds.isEmpty else { return }
             let visible = visibleBounds(bounds, crop: crop, rotation: rotation)
             guard !visible.isNull, !visible.isEmpty else { return }
-            let (runs, fontSize) = styledRuns(in: attributed, range: range, fallback: nsString.substring(with: range))
+            let (styled, fontSize) = styledRuns(in: attributed, range: range, fallback: nsString.substring(with: range))
+            let runs = removingStraySoftHyphens(styled)
             let text = runs.map(\.text).joined()
             guard !text.allSatisfy(\.isWhitespace) else { return }
             result.append(PDFTextLine(
@@ -41,6 +42,23 @@ public enum PDFLineExtractor {
             ))
         }
         return result
+    }
+
+    /// Removes soft hyphens left inside a line by an earlier layout (`эмоцио\u{AD} нальную`): the word is joined
+    /// again, or a single space is kept when the hyphen stood between spaces. A soft hyphen ending the line is a
+    /// real line-end hyphenation and stays for `LineJoiner`.
+    static func removingStraySoftHyphens(_ runs: [InlineRun]) -> [InlineRun] {
+        var result = runs
+        for index in result.indices {
+            result[index].text.replace(/(\s?)\u{AD}\s+/) { $0.output.1 }
+            // A soft hyphen ending this run with the following run starting with whitespace.
+            guard result[index].text.last == "\u{AD}", index + 1 < result.count,
+                  result[index + 1].text.first?.isWhitespace == true else { continue }
+            result[index].text.removeLast()
+            // Joined back to the word, unless the hyphen stood after a space (that space separates the words).
+            result[index + 1].text = String(result[index + 1].text.drop(while: \.isWhitespace))
+        }
+        return result.filter { !$0.text.isEmpty }
     }
 
     /// Maps a media-box-space point (e.g. an outline destination) to the visible page space used by line bounds.

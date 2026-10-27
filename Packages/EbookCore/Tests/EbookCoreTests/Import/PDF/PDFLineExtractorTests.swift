@@ -79,4 +79,22 @@ struct PDFLineExtractorTests {
             #expect(CGRect(origin: .zero, size: line.pageSize).contains(line.bounds))
         }
     }
+
+    @Test(arguments: [
+        ("когнитивную, эмоцио\u{AD} нальную, сенсорную", "когнитивную, эмоциональную, сенсорную"),
+        ("потеряли конт\u{AD} роль над", "потеряли контроль над"),
+        ("одних лекарств \u{AD} недостаточно.", "одних лекарств недостаточно."),
+        ("Silben\u{AD}\u{A0}trennung", "Silbentrennung"),
+        ("ordinary text", "ordinary text"),
+        ("ends with a soft hyphen\u{AD}", "ends with a soft hyphen\u{AD}"),  // a real line break: LineJoiner handles it
+    ])
+    func strayMidLineSoftHyphensAreRemoved(input: String, expected: String) {
+        let runs = PDFLineExtractor.removingStraySoftHyphens([InlineRun(input)])
+        #expect(runs.map(\.text).joined() == expected)
+    }
+
+    @Test func straySoftHyphenRemovalKeepsRunStyles() {
+        let runs = PDFLineExtractor.removingStraySoftHyphens([InlineRun("воз"), InlineRun("ник\u{AD} ла", bold: true)])
+        #expect(runs == [InlineRun("воз"), InlineRun("никла", bold: true)])
+    }
 }

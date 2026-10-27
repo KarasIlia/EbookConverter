@@ -12,7 +12,8 @@ struct ChapterPreview: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading) {
+            // No gap between paragraphs, as in the exported book; headings and images bring their own padding.
+            LazyVStack(alignment: .leading, spacing: 0) {
                 // The writers put the chapter title above its text.
                 if let heading = TableOfContentsLabel.heading(of: chapter) {
                     Text(heading)

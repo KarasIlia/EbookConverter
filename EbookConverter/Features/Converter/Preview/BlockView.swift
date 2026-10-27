@@ -15,7 +15,9 @@ struct BlockView: View {
                 .padding(.vertical)
                 .accessibilityAddTraits(.isHeader)
         case .paragraph(let runs):
-            Text(Self.attributedText(runs))
+            // Like the exported book (`text-indent: 1.5em`, no gap between paragraphs): a first-line indent marks
+            // each paragraph. SwiftUI Text has no first-line indent, so an em space + en space (1.5 em) leads the text.
+            Text(AttributedString(Self.firstLineIndent) + Self.attributedText(runs))
                 .textSelection(.enabled)
         case .image(let asset):
             if let image = imageCache.image(for: asset) {
@@ -25,6 +27,7 @@ struct BlockView: View {
                     // Never upscale beyond the image's own size; the column width caps it otherwise.
                     .frame(maxWidth: CGFloat(asset.pixelWidth))
                     .frame(maxWidth: .infinity)
+                    .padding(.vertical)
                     .accessibilityLabel(Text(.previewImage))
             } else {
                 Image(systemName: "photo")
@@ -35,6 +38,9 @@ struct BlockView: View {
             }
         }
     }
+
+    /// Em space + en space: the 1.5 em first-line indent of exported paragraphs.
+    static let firstLineIndent = "\u{2003}\u{2002}"
 
     static func headingFont(level: Int) -> Font {
         switch level {
