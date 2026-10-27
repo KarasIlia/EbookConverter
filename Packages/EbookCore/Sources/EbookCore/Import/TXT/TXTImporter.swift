@@ -50,8 +50,18 @@ public struct TXTImporter: BookImporter {
     private static let fullLineShare = 0.75
     /// A file is hard-wrapped when at least this share of its lines is filled to the margin…
     private static let wrappedLineShare = 0.6
-    /// …and its wrap width (90th percentile of line lengths) is at most this many characters.
+    /// …and its wrap width (90th percentile of line lengths) is at most this many characters…
     private static let maxWrapWidth = 100
+    /// …and at least this many in scripts written with spaces: shorter "wrapped" lines are verse, not prose.
+    private static let minSpacedWrapWidth = 50
+    /// …or this many in scripts written without spaces (CJK, Thai, …), where a line holds more per character.
+    private static let minUnspacedWrapWidth = 15
+    /// When at least this share of lines is indented, every line is its own (indented) paragraph.
+    private static let indentedLinesShare = 0.8
+    /// Closing quotes and brackets that may follow a sentence terminal at the end of a line.
+    private static let closingPunctuation: Set<Character> = [
+        "\"", "'", "»", "”", "’", "›", "」", "』", "）", ")", "]", "】", "〉", "》",
+    ]
 
     /// Splits text into paragraphs.
     ///
@@ -69,7 +79,8 @@ public struct TXTImporter: BookImporter {
             (text: raw.trimmingCharacters(in: .whitespacesAndNewlines), isIndented: raw.first?.isWhitespace == true)
         }
         let nonEmpty = lines.filter { !$0.text.isEmpty }
-        guard let wrapWidth = wrapWidth(of: nonEmpty.map(\.text.count)) else {
+        let mostlyIndented = Double(nonEmpty.count { $0.isIndented }) >= indentedLinesShare * Double(nonEmpty.count)
+        guard !mostlyIndented, let wrapWidth = wrapWidth(of: nonEmpty.map(\.text)) else {
             return nonEmpty.map(\.text)
         }
         let fullLength = fullLineShare * Double(wrapWidth)
@@ -88,7 +99,7 @@ public struct TXTImporter: BookImporter {
                 flush()
                 continue
             }
-            let previousEndsSentence = previous.last.map(ScriptTraits.isSentenceTerminal) == true
+            let previousEndsSentence = endsSentence(previous)
             if (line.isIndented && indentationMarksParagraphs) || (previousEndsSentence && Double(previous.count) < fullLength) {
                 flush()
             }
@@ -104,14 +115,32 @@ public struct TXTImporter: BookImporter {
         return result
     }
 
+    /// `true` if `line` ends with a sentence terminal, possibly followed by closing quotes or brackets (`"Out where?"`).
+    private static func endsSentence(_ line: String) -> Bool {
+        guard let last = line.last(where: { !closingPunctuation.contains($0) }) else { return false }
+        return ScriptTraits.isSentenceTerminal(last)
+    }
+
     /// The wrap width of hard-wrapped text, or `nil` when lines are paragraphs of their own.
-    private static func wrapWidth(of lengths: [Int]) -> Int? {
+    private static func wrapWidth(of lines: [String]) -> Int? {
+        let lengths = lines.map(\.count)
         guard lengths.count >= minimumWrappedLines else { return nil }
         let sorted = lengths.sorted()
         let width = sorted[Int(Double(sorted.count - 1) * 0.9)]
-        guard width <= maxWrapWidth else { return nil }
+        let minWidth = isMostlyUnspaced(lines) ? minUnspacedWrapWidth : minSpacedWrapWidth
+        guard width <= maxWrapWidth, width >= minWidth else { return nil }
         let full = lengths.count { Double($0) > fullLineShare * Double(width) }
         return Double(full) >= wrappedLineShare * Double(lengths.count) ? width : nil
+    }
+
+    /// `true` if most letters of `lines` are in scripts written without spaces (CJK, Thai, …).
+    private static func isMostlyUnspaced(_ lines: [String]) -> Bool {
+        var unspaced = 0, letters = 0
+        for character in lines.joined() where character.isLetter {
+            letters += 1
+            if ScriptTraits.isWrittenWithoutSpaces(character) { unspaced += 1 }
+        }
+        return letters > 0 && unspaced * 2 > letters
     }
 
     /// A line that must not be glued to the text after it.

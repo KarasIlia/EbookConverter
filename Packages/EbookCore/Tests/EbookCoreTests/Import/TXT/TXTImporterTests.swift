@@ -221,4 +221,73 @@ import Foundation
         #expect(result.warnings.contains(.noChaptersFound))
         #expect(result.document.chapters.map(\.title) == [nil])
     }
+
+    // MARK: - Line-per-paragraph texts that look hard-wrapped
+
+    @Test func poetryKeepsEveryLine() {
+        let poem = """
+        Мой дядя самых честных правил,
+        Когда не в шутку занемог,
+        Он уважать себя заставил
+        И лучше выдумать не мог.
+        Его пример другим наука;
+        Но, боже мой, какая скука
+        С больным сидеть и день и ночь,
+        Не отходя ни шагу прочь!
+        """
+        #expect(TXTImporter.paragraphs(in: poem).count == 8)
+    }
+
+    @Test func englishPoetryKeepsEveryLine() {
+        let poem = """
+        I wandered lonely as a cloud
+        That floats on high o'er vales and hills,
+        When all at once I saw a crowd,
+        A host, of golden daffodils;
+        Beside the lake, beneath the trees,
+        Fluttering and dancing in the breeze.
+        """
+        #expect(TXTImporter.paragraphs(in: poem).count == 6)
+    }
+
+    @Test func cjkLinesIndentedEverywhereAreParagraphs() {
+        let lines = [
+            "　我们今天去公园散步，天气非常好，阳光明媚，微风轻轻地吹着湖面。",
+            "　「你看那边的花开得真漂亮！」妹妹指着远处的花坛对我说道。",
+            "　我点点头，拉着她的手慢慢走过去，花香扑鼻而来让人心情愉快。",
+            "　公园里有很多人在锻炼身体，有的跑步，有的打太极拳，非常热闹。",
+            "　「我们明天还来吧。」她笑着说，眼睛里闪烁着期待的光芒。",
+            "　太阳渐渐西沉，我们才依依不舍地离开了这个美丽的地方回家。",
+        ]
+        #expect(TXTImporter.paragraphs(in: lines.joined(separator: "\n")) == lines.map { $0.trimmingCharacters(in: .whitespaces) })
+    }
+
+    @Test func hardWrappedProseStillJoins() {
+        let text = """
+            The morning was cold and the road was empty when the old man finally
+        left the house. He walked slowly towards the river, thinking about the
+        letter he had received the day before and about everything it meant.
+            By noon he had reached the bridge. The water below was dark and fast,
+        and for a long time he simply stood there and watched it run past him.
+        """
+        let paragraphs = TXTImporter.paragraphs(in: text)
+        #expect(paragraphs.count == 2)
+        #expect(paragraphs[0].hasPrefix("The morning was cold") && paragraphs[0].hasSuffix("everything it meant."))
+    }
+
+    @Test func shortReplyEndingInQuoteEndsParagraph() {
+        let text = """
+        The rain had not stopped for three days and the whole village was tired of
+        waiting for the sun to come back over the hills behind the old church.
+        "Out where?"
+        She did not answer him and kept looking at the grey sky above the fields
+        as if she could see something there that nobody else in the room could.
+        """
+        // A full line ending a sentence is indistinguishable from a wrap, but the short reply ending in `?"`
+        // must close its paragraph so the next one starts on its own.
+        let paragraphs = TXTImporter.paragraphs(in: text)
+        #expect(paragraphs.count == 2)
+        #expect(paragraphs.first?.hasSuffix("\"Out where?\"") == true)
+        #expect(paragraphs.last?.hasPrefix("She did not answer") == true)
+    }
 }
