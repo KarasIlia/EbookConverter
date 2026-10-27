@@ -13,8 +13,14 @@ public enum PDFReflow {
     static let fontSizeTolerance = 1.0
     /// Paragraph break when the vertical step exceeds this multiple of the page's median line spacing.
     static let gapRatio = 1.6
-    /// Paragraph break when a line starts this many font sizes right (indent) or left (hanging line) of its column's body edge.
-    static let indentRatio = 1.2
+    /// Paragraph break when a line starts this many font sizes right of its column's body edge (first-line indent).
+    /// Typeset books indent by about 1 em or less, so this stays well below 1.
+    static let indentRatio = 0.6
+    /// Paragraph break when a line starts this many font sizes left of the body edge (hanging first line).
+    /// Larger than `indentRatio`: optical margin alignment hangs quotes and dashes up to about half an em.
+    static let hangingRatio = 1.2
+    /// Widest shift, in font sizes, of a list item's wrapped line past the item's marker line.
+    static let listContinuationRatio = 2.5
     /// Horizontal jump that means the text moved to another column; also the widest plausible indent.
     static let columnJump = 100.0
     /// Extra room, in font sizes, a line must leave at its end before the next line's first word counts as fitting.
@@ -89,7 +95,10 @@ public enum PDFReflow {
         var result: [Located] = []
         for (index, line) in lines.enumerated() {
             if index > 0,
-               !breaks(between: lines[index - 1], and: line, previousEdges: edges[index - 1], nextEdges: edges[index], spacing: spacing),
+               !breaks(
+                   between: lines[index - 1], and: line, paragraphStart: result.last?.firstLine,
+                   previousEdges: edges[index - 1], nextEdges: edges[index], spacing: spacing
+               ),
                var current = result.popLast() {
                 current.paragraph.runs = joined(current.paragraph.runs, line.runs)
                 current.lines.append(line)
@@ -235,7 +244,7 @@ public enum PDFReflow {
     }
 
     private static func breaks(
-        between previous: PDFTextLine, and next: PDFTextLine,
+        between previous: PDFTextLine, and next: PDFTextLine, paragraphStart: PDFTextLine?,
         previousEdges: ColumnEdges, nextEdges: ColumnEdges, spacing: [Int: Double]
     ) -> Bool {
         let previousText = previous.text.trimmingCharacters(in: .whitespaces)
@@ -251,9 +260,30 @@ public enum PDFReflow {
             }
             if endsEarly(previous, previousText: previousText, edges: previousEdges, before: next) { return true }
         }
-        // Indented first line, or a hanging first line left of the body edge.
+        // Indented first line, or a hanging first line left of the body edge. A fragment on the same baseline
+        // (text after a fill-in blank) continues its line, whatever its start.
+        if samePage, !changesColumn, abs(previous.bounds.midY - next.bounds.midY) < next.fontSize / 2 { return false }
         let offset = next.bounds.minX - nextEdges.left
-        return abs(offset) >= indentRatio * next.fontSize && abs(offset) < columnJump
+        if offset > 0, [paragraphStart, previous].contains(where: { $0.map { isListContinuation(next, of: $0) } ?? false }) {
+            return false
+        }
+        let threshold = (offset > 0 ? indentRatio : hangingRatio) * next.fontSize
+        return abs(offset) >= threshold && abs(offset) < columnJump
+    }
+
+    /// `true` when the paragraph is a list item (`4 the internet…`, `b) …`, `• …`) and `next` is its wrapped
+    /// continuation, aligned after the marker rather than indented as a new paragraph.
+    private static func isListContinuation(_ next: PDFTextLine, of start: PDFTextLine) -> Bool {
+        let text = start.text.trimmingCharacters(in: .whitespaces)
+        let shift = next.bounds.minX - start.bounds.minX
+        return shift > 0 && shift <= listContinuationRatio * next.fontSize
+            && startsWithListMarker(text) && !startsWithListMarker(next.text)
+    }
+
+    /// A list marker followed by a space: up to three digits or a letter (optionally with `.`/`)`), or a bullet.
+    private static func startsWithListMarker(_ text: String) -> Bool {
+        text.trimmingCharacters(in: .whitespaces)
+            .wholeMatch(of: /(?:\d{1,3}[.)]?|\p{L}[.)]|[•●▪◦‣∙*–—-])\s+\S.*/) != nil
     }
 
     /// `true` when `previous` stops clearly short of the column's right edge and `next`'s first word would have

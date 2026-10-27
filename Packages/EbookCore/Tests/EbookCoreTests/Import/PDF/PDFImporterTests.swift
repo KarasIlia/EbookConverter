@@ -147,4 +147,26 @@ struct PDFImporterTests {
         ]))
         await #expect(throws: ImportError.pdfLocked) { try await importBook(url) }
     }
+
+    @Test func oneEmFirstLineIndentsSplitParagraphsInRealPDF() async throws {
+        // Justified-looking lines: each paragraph's last line runs almost to the margin, so only the 1 em indent marks it.
+        let lines: [(String, Double)] = [
+            ("The morning was cold and the road was empty when the old", 12),
+            ("man finally left the house and walked slowly to the river bank,", 0),
+            ("thinking about the letter he had received the day before it.", 0),
+            ("By noon he had reached the old bridge over the dark water and", 12),
+            ("stood there for a long time watching the current run past him", 0),
+            ("until the cold grey afternoon light began to fade over the hills.", 0),
+        ]
+        let boxes = lines.enumerated().map { index, entry in
+            FixtureTextBox(entry.0, rect: CGRect(x: 72 + entry.1, y: 700 - Double(index) * 14.4, width: 460, height: 14), fontSize: 12)
+        }
+        let url = try FixtureFactory.pdf(pages: [boxes])
+        let result = try await PDFImporter().importBook(from: url, context: ImportContext())
+        let paragraphs = result.document.leafChapters.flatMap(\.blocks).compactMap { block -> String? in
+            if case .paragraph(let runs) = block { return runs.map(\.text).joined() } else { return nil }
+        }
+        #expect(paragraphs.count == 2)
+        #expect(paragraphs.last?.hasPrefix("By noon") == true)
+    }
 }

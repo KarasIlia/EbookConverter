@@ -290,4 +290,66 @@ struct PDFReflowTests {
             #expect(leftIndex < rightIndex)
         }
     }
+
+    // MARK: - First-line indents of typical sizes
+
+    /// Two paragraphs whose last lines run almost to the margin, so only the second paragraph's
+    /// first-line indent of `indent` points can tell where it starts.
+    private func indentedParagraphs(indent: Double, fontSize: Double = 12) -> [PDFTextLine] {
+        let step = fontSize * 1.2
+        let full = 451.0, nearlyFull = 440.0
+        return [
+            line("The morning was cold and the road was", x: 72 + indent, y: 700, width: full - indent, fontSize: fontSize),
+            line("empty when the old man finally left the", y: 700 - step, width: full, fontSize: fontSize),
+            line("house and walked slowly to the river bank.", y: 700 - 2 * step, width: nearlyFull, fontSize: fontSize),
+            line("By noon he had reached the old bridge and", x: 72 + indent, y: 700 - 3 * step, width: full - indent, fontSize: fontSize),
+            line("stood there for a long time watching water", y: 700 - 4 * step, width: full, fontSize: fontSize),
+            line("run past him in the cold grey afternoon light.", y: 700 - 5 * step, width: nearlyFull, fontSize: fontSize),
+        ]
+    }
+
+    @Test(arguments: [
+        (12.0, 12.0),  // 1 em — typical typeset books
+        (9.6, 12.0),   // 0.8 em
+        (8.0, 10.0),   // 0.8 em at 10 pt
+        (35.4, 12.0),  // Word's default 1.25 cm
+    ])
+    func breaksOnTypicalFirstLineIndents(indent: Double, fontSize: Double) {
+        let result = texts(indentedParagraphs(indent: indent, fontSize: fontSize))
+        #expect(result.count == 2)
+        #expect(result.last?.hasPrefix("By noon") == true)
+    }
+
+    @Test(arguments: [-6.0, 3.0])  // a quote hung into the margin by half an em; a quarter-em glyph wobble
+    func smallOffsetsDoNotBreak(offset: Double) {
+        let result = texts([
+            line("The morning was cold and the road was", y: 700, width: 451),
+            line("«empty» when the old man finally left the", x: 72 + offset, y: 685.6, width: 451 - offset),
+            line("house and walked slowly to the river bank.", y: 671.2, width: 440),
+        ])
+        #expect(result.count == 1)
+    }
+
+    @Test func fragmentAfterFillInBlankOnSameBaselineDoesNotBreak() {
+        let result = texts([
+            line("Building a new stadium in the city centre will make things", y: 700, width: 380),
+            line("the stadium will make things", y: 685.6, width: 170),
+            line("worse.", x: 300, y: 685.6, width: 40),
+        ])
+        #expect(result.count == 1)
+        #expect(result.first?.hasSuffix("things worse.") == true)
+    }
+
+    @Test func numberedListItemContinuationJoinsItsItem() {
+        let result = texts([
+            line("4 the internet has a complete", x: 56.7, y: 431.6, width: 178, fontSize: 9.5),
+            line("transformed our lives", x: 68.0, y: 421.1, width: 90, fontSize: 9.5),
+            line("5 my job was to oversee financial operations", x: 56.7, y: 401.1, width: 200, fontSize: 9.5),
+            line("in the whole company", x: 68.0, y: 390.6, width: 90, fontSize: 9.5),
+        ])
+        #expect(result == [
+            "4 the internet has a complete transformed our lives",
+            "5 my job was to oversee financial operations in the whole company",
+        ])
+    }
 }
